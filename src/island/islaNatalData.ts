@@ -139,6 +139,39 @@ export const ISLA_NATAL_DECK_RECTS: IslaNatalSolidRect[] = [
 ];
 
 /* ------------------------------------------------------------------ */
+/* INTERIOR DE LA CABAÑA                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Sala única de la cabaña familiar. Vive en su propio espacio de coordenadas
+ * (480 × 300) y se dibuja con la misma cámara y el mismo avatar que la isla.
+ * La mochila cuelga del clavo junto a la ventana hasta que el jugador la recoge.
+ */
+export const ISLA_NATAL_CABIN = {
+  roomW: 480,
+  roomH: 300,
+  spawn: { x: 240, y: 246 },
+  door: { x: 240, y: 282, radius: 46 },
+  backpack: { x: 200, y: 104, radius: 50 },
+  /** Muebles que bloquean el paso dentro de la sala. */
+  solids: [
+    { id: 'cama', x: 30, y: 150, w: 112, h: 114 },
+    { id: 'mesa', x: 318, y: 148, w: 86, h: 58 },
+    { id: 'cocina', x: 404, y: 112, w: 64, h: 92 },
+  ] as IslaNatalSolidRect[],
+};
+
+export function isCabinInteriorWalkable(x: number, y: number): boolean {
+  if (x < 26 || x > 454 || y < 138 || y > 286) return false;
+  for (const s of ISLA_NATAL_CABIN.solids) {
+    if (x >= s.x - 4 && x <= s.x + s.w + 4 && y >= s.y - 4 && y <= s.y + s.h + 4) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
 /* CONSULTAS DE COLISIÓN                                              */
 /* ------------------------------------------------------------------ */
 
@@ -230,6 +263,8 @@ export const ISLA_NATAL_FLAGS = {
   signal: 'isla-natal-senal',
   paddle: 'isla-natal-paleta',
   departed: 'isla-natal-partida',
+  cabinVisited: 'isla-natal-cabana-vista',
+  backpack: 'isla-natal-mochila',
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -241,6 +276,7 @@ export type IslaNatalPoiKind =
   | 'net'
   | 'shells'
   | 'window'
+  | 'door'
   | 'mailbox'
   | 'crate'
   | 'viewpoint-sea'
@@ -266,6 +302,77 @@ export interface IslaNatalPoi {
   accentHex: string;
   dialog: IslaNatalDialog;
 }
+
+/**
+ * Carteles de orientación de la isla. Comparten el formato pequeño de los
+ * carteles del Origen y se pueden leer pulsando [E] igual que allí.
+ */
+export interface IslaNatalSignSpec {
+  id: string;
+  x: number;
+  y: number;
+  zoneTitle: string;
+  lines: string[];
+  accentHex: string;
+}
+
+export const ISLA_NATAL_SIGNS: IslaNatalSignSpec[] = [
+  {
+    id: 'cartel-puerto-norte',
+    x: 748,
+    y: 556,
+    zoneTitle: 'PUERTO NORTE',
+    lines: [
+      'Costa norte de la pradera. El muelle de tablones entra en el agua tranquila.',
+      'Más allá de la rompiente, el mar abierto separa la Isla Natal de la Isla del Origen.',
+    ],
+    accentHex: '#a5b4fc',
+  },
+  {
+    id: 'cartel-pradera',
+    x: 700,
+    y: 710,
+    zoneTitle: 'PRADERA DE CASA',
+    lines: [
+      'La hierba aún recuerda tus pasos.',
+      'La cabaña familiar se alza al oeste, junto al sendero de tierra.',
+    ],
+    accentHex: '#86efac',
+  },
+  {
+    id: 'cartel-alto-rocas',
+    x: 446,
+    y: 606,
+    zoneTitle: 'ALTO DE LAS ROCAS',
+    lines: [
+      'El mirador de la infancia.',
+      'La meseta de piedra domina la isla entera desde el noroeste.',
+    ],
+    accentHex: '#fcd34d',
+  },
+  {
+    id: 'cartel-arboleda',
+    x: 1032,
+    y: 692,
+    zoneTitle: 'LA ARBOLEDA',
+    lines: [
+      'Algo espera entre los árboles.',
+      'El sendero de tablones cruza la ensenada hacia el este de la isla.',
+    ],
+    accentHex: '#67e8f9',
+  },
+  {
+    id: 'cartel-mirador',
+    x: 1080,
+    y: 760,
+    zoneTitle: 'MIRADOR DEL OLEAJE',
+    lines: [
+      'Un horizonte que parpadea.',
+      'La punta de arena mira al sureste, más allá del arrecife.',
+    ],
+    accentHex: '#a5b4fc',
+  },
+];
 
 export const ISLA_NATAL_POIS: IslaNatalPoi[] = [
   {
@@ -305,20 +412,20 @@ export const ISLA_NATAL_POIS: IslaNatalPoi[] = [
   },
   {
     id: 'puerta-cabana',
-    kind: 'window',
+    kind: 'door',
     x: 506,
     y: 752,
-    radius: 56,
-    label: 'Llamar a la puerta',
+    radius: 62,
+    label: 'Entrar a la cabaña',
     accentHex: '#fdba74',
     dialog: {
       title: 'La cabaña',
       subtitle: 'Puerta del este',
       paragraphs: [
-        'La puerta está entornada. Del otro lado llega el mismo olor a madera caliente que sale por la ventana, y una luz que no parpadea.',
-        'La aldaba de latón cede apenas: algo la sostiene desde dentro. No insistes; la ventana del este sigue abierta a la tarde.',
+        'La madera de la puerta está tibia. Del otro lado llega olor a leña, a pan de ayer y a la lámpara de aceite que tu familia dejaba encendida.',
+        'La mochila de lona sigue colgada junto a la ventana, esperando a que alguien vuelva a cargarla.',
       ],
-      hint: 'La casa te deja mirar, pero todavía no entrar.',
+      hint: 'Empuja la puerta para entrar.',
     },
   },
   {
@@ -373,6 +480,21 @@ export const ISLA_NATAL_POIS: IslaNatalPoi[] = [
       hint: 'Lleva años encendido esperando a que alguien lo note.',
     },
   },
+  ...ISLA_NATAL_SIGNS.map(
+    (sign): IslaNatalPoi => ({
+      id: sign.id,
+      kind: 'sign',
+      x: sign.x,
+      y: sign.y,
+      radius: 56,
+      label: 'Leer el cartel',
+      accentHex: sign.accentHex,
+      dialog: {
+        title: sign.zoneTitle,
+        paragraphs: sign.lines,
+      },
+    })
+  ),
 ];
 
 /* ------------------------------------------------------------------ */

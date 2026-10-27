@@ -27,11 +27,13 @@ import {
 import {
   ISLA_NATAL_ARCADE_ANCHOR,
   ISLA_NATAL_BOULDERS,
+  ISLA_NATAL_CABIN,
   ISLA_NATAL_DEPARTURE,
   ISLA_NATAL_FLOWERS,
   ISLA_NATAL_PALMS,
   ISLA_NATAL_PEBBLES,
   ISLA_NATAL_SHELLS,
+  ISLA_NATAL_SIGNS,
   ISLA_NATAL_SOLIDS,
   ISLA_NATAL_TREES,
   ISLA_NATAL_TUFTS,
@@ -112,13 +114,7 @@ const SHELLS_POI_POS = { x: 946, y: 974 };
 const MAILBOX_POS = { x: 574, y: 792 };
 const CRATE_POS = { x: 596, y: 704 };
 
-/** Carteles de zona de gran formato, integrados en el terreno como en el Origen. */
-const NATAL_ZONE_SIGNS: { x: number; y: number; label: string; kicker: string }[] = [
-  { x: 700, y: 710, label: 'PRADERA DE CASA', kicker: 'ISLA NATAL · OESTE' },
-  { x: 446, y: 606, label: 'ALTO DE LAS ROCAS', kicker: 'ISLA NATAL · MIRADOR' },
-  { x: 1032, y: 692, label: 'LA ARBOLEDA', kicker: 'ISLA NATAL · ESTE' },
-  { x: 1080, y: 760, label: 'MIRADOR DEL OLEAJE', kicker: 'ISLA NATAL · SURESTE' },
-];
+/** Carteles de zona: mismo formato pequeño que los del Origen. */
 
 interface NatalBushSpec {
   x: number;
@@ -2076,6 +2072,112 @@ function drawHut(ctx: CanvasRenderingContext2D, elapsed: number, reducedMotion: 
   ctx.fillRect(x + 10, y + h - 3, 8, 1);
   ctx.fillStyle = '#5f9a52';
   ctx.fillRect(x + 12, y + h - 4, 3, 1);
+
+  // ---------------------------------------------------------------
+  // PORCHE DE ENTRADA: alero, postes, banco y rótulo tallado.
+  // ---------------------------------------------------------------
+  const porchY = doorY - 22;
+  const postLeft = doorX - 16;
+  const postRight = doorX + 42;
+  // Sombra del porche sobre el muro.
+  ctx.fillStyle = 'rgba(36, 20, 10, 0.3)';
+  ctx.fillRect(doorX - 8, porchY + 2, 58, 6);
+  // Postes torneados.
+  for (const px of [postLeft, postRight]) {
+    ctx.fillStyle = '#3f2a19';
+    ctx.fillRect(px, porchY - 2, 5, doorY - porchY + 22);
+    ctx.fillStyle = '#8a6238';
+    ctx.fillRect(px + 1, porchY - 1, 2, doorY - porchY + 20);
+    ctx.fillStyle = '#5c3f26';
+    ctx.fillRect(px - 1, porchY - 3, 7, 3);
+    ctx.fillRect(px - 1, y + h - 6, 7, 3);
+  }
+  // Viga del alero y tablillas.
+  ctx.fillStyle = '#4f3521';
+  ctx.fillRect(postLeft - 4, porchY - 8, postRight - postLeft + 13, 7);
+  ctx.fillStyle = '#8f6f30';
+  ctx.fillRect(postLeft - 3, porchY - 8, postRight - postLeft + 11, 2);
+  for (let px = postLeft - 2; px < postRight + 8; px += 9) {
+    ctx.fillStyle = 'rgba(50, 32, 18, 0.45)';
+    ctx.fillRect(px, porchY - 6, 1, 4);
+  }
+  // Alero de paja inclinado.
+  ctx.fillStyle = '#c9a24a';
+  ctx.beginPath();
+  ctx.moveTo(postLeft - 6, porchY - 8);
+  ctx.lineTo(postRight + 10, porchY - 8);
+  ctx.lineTo(postRight + 4, porchY - 16);
+  ctx.lineTo(postLeft - 1, porchY - 16);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 226, 154, 0.45)';
+  ctx.fillRect(postLeft - 1, porchY - 16, postRight - postLeft + 5, 1);
+  ctx.fillStyle = 'rgba(126, 94, 42, 0.6)';
+  ctx.fillRect(postLeft - 2, porchY - 10, postRight - postLeft + 8, 1);
+  for (let px = postLeft - 2; px < postRight + 4; px += 5) {
+    const th = hash2(px, porchY);
+    if (th < 0.45) continue;
+    ctx.fillStyle = th > 0.7 ? '#b8913f' : '#a8823a';
+    ctx.fillRect(px, porchY - 8, 1, 1 + Math.floor(th * 2));
+  }
+  // Rótulo tallado «CASA» colgado bajo el alero.
+  const signCx = doorX + 12;
+  ctx.fillStyle = '#2f1d0f';
+  ctx.fillRect(signCx - 26, porchY - 6, 52, 14);
+  ctx.fillStyle = '#a87c45';
+  ctx.fillRect(signCx - 25, porchY - 5, 50, 12);
+  ctx.fillStyle = '#c69a5c';
+  ctx.fillRect(signCx - 24, porchY - 5, 48, 1);
+  ctx.fillStyle = '#4a2f18';
+  ctx.fillRect(signCx - 22, porchY - 10, 1, 5);
+  ctx.fillRect(signCx + 21, porchY - 10, 1, 5);
+  ctx.fillStyle = '#2c1a0d';
+  ctx.font = '700 7px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('CASA', signCx, porchY + 4);
+  ctx.textAlign = 'left';
+  // Banco de madera junto a la ventana.
+  const benchX = winX - 16;
+  const benchY = y + h - 14;
+  ctx.fillStyle = '#3f2a19';
+  ctx.fillRect(benchX, benchY, 30, 3);
+  ctx.fillStyle = '#8a6238';
+  ctx.fillRect(benchX + 1, benchY - 1, 28, 2);
+  ctx.fillRect(benchX + 2, benchY + 2, 2, 8);
+  ctx.fillRect(benchX + 26, benchY + 2, 2, 8);
+  ctx.fillStyle = 'rgba(50, 32, 18, 0.5)';
+  ctx.fillRect(benchX + 4, benchY + 4, 22, 1);
+  // Maceta de barro con lavanda sobre el banco.
+  ctx.fillStyle = '#9a5a3a';
+  ctx.fillRect(benchX + 20, benchY - 7, 7, 6);
+  ctx.fillStyle = '#c97a4a';
+  ctx.fillRect(benchX + 20, benchY - 7, 7, 1);
+  ctx.fillStyle = '#6b8f5a';
+  ctx.fillRect(benchX + 21, benchY - 11, 1, 4);
+  ctx.fillRect(benchX + 24, benchY - 12, 1, 5);
+  ctx.fillStyle = '#a78bd0';
+  ctx.fillRect(benchX + 20, benchY - 13, 3, 2);
+  ctx.fillRect(benchX + 24, benchY - 13, 3, 2);
+  // Piedras del sendero que salen de la puerta hacia el este.
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = 'rgba(40, 28, 16, 0.3)';
+    ctx.fillRect(doorX + 20 + i * 16, y + h + 6 + i * 3, 12, 4);
+    ctx.fillStyle = i % 2 === 0 ? '#a9a190' : '#bdb5a2';
+    ctx.fillRect(doorX + 19 + i * 16, y + h + 5 + i * 3, 11, 3);
+    ctx.fillStyle = 'rgba(255, 250, 236, 0.35)';
+    ctx.fillRect(doorX + 19 + i * 16, y + h + 5 + i * 3, 9, 1);
+  }
+  // Charco de luz cálida que la ventana proyecta en la hierba.
+  if (!reducedMotion) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const spill = ctx.createRadialGradient(winX + 6, y + h + 2, 2, winX + 6, y + h + 2, 26);
+    spill.addColorStop(0, `rgba(255, 196, 110, ${(0.14 * flicker).toFixed(2)})`);
+    spill.addColorStop(1, 'rgba(255, 196, 110, 0)');
+    ctx.fillStyle = spill;
+    ctx.fillRect(winX - 20, y + h - 18, 56, 48);
+    ctx.restore();
+  }
 }
 
 function drawShed(
@@ -2365,8 +2467,8 @@ function drawCabinet(
 }
 
 function drawSign(ctx: CanvasRenderingContext2D): void {
-  // Cartel de madera artesanal de Isla Orígenes con el nombre legible de la zona.
-  drawGbcWoodenSign(ctx, SIGN_POS.x, SIGN_POS.y, 'PLAYA DEL AURORA', true, 'ISLA NATAL · SUR');
+  // Mismo cartel pequeño del Origen; el texto se lee pulsando [E].
+  drawGbcWoodenSign(ctx, SIGN_POS.x, SIGN_POS.y);
 }
 
 function drawNet(ctx: CanvasRenderingContext2D, elapsed: number): void {
@@ -2635,9 +2737,14 @@ function drawDepartureBeacon(
 /* AVATARES Y PARTÍCULAS                                              */
 /* ------------------------------------------------------------------ */
 
+type NatalAvatarParams = Pick<
+  IslaNatalRenderParams,
+  'player' | 'reducedMotion' | 'skinColor' | 'hairColor' | 'shirtColor' | 'appearance'
+>;
+
 function drawPlayer(
   ctx: CanvasRenderingContext2D,
-  params: IslaNatalRenderParams,
+  params: NatalAvatarParams,
   elapsed: number
 ): void {
   const p = params.player;
@@ -2784,6 +2891,700 @@ function drawPromptBadge(ctx: CanvasRenderingContext2D, prompt: IslaNatalPromptS
 }
 
 /* ------------------------------------------------------------------ */
+/* INTERIOR DE LA CABAÑA                                              */
+/* ------------------------------------------------------------------ */
+
+export interface IslaNatalCabinRenderParams {
+  ctx: CanvasRenderingContext2D;
+  vw: number;
+  vh: number;
+  camera: { x: number; y: number };
+  elapsed: number;
+  reducedMotion: boolean;
+  player: IslaNatalPlayerRender;
+  skinColor: string;
+  hairColor: string;
+  shirtColor: string;
+  appearance: AvatarAppearance;
+  prompt: IslaNatalPromptSpec | null;
+  /** La mochila sigue colgada del clavo junto a la ventana. */
+  backpackOnHook: boolean;
+}
+
+/** Sala de la cabaña: madera cálida, luz de tarde y la mochila familiar. */
+function drawCabinShell(ctx: CanvasRenderingContext2D, elapsed: number, reducedMotion: boolean): void {
+  const W = ISLA_NATAL_CABIN.roomW;
+  const H = ISLA_NATAL_CABIN.roomH;
+  const wallH = 132;
+
+  // Suelo de tablones anchos.
+  ctx.fillStyle = '#5b3a22';
+  ctx.fillRect(0, wallH, W, H - wallH);
+  for (let y = wallH; y < H; y += 14) {
+    ctx.fillStyle = 'rgba(46, 27, 14, 0.55)';
+    ctx.fillRect(0, y, W, 1);
+    ctx.fillStyle = 'rgba(122, 84, 50, 0.55)';
+    ctx.fillRect(0, y + 1, W, 1);
+    const seam = (Math.floor(y / 14) % 2 === 0 ? 96 : 188) + (y % 3) * 23;
+    ctx.fillStyle = 'rgba(40, 24, 12, 0.5)';
+    ctx.fillRect(seam % W, y, 1, 13);
+    for (let x = 24; x < W; x += 58) {
+      const k = hash2(x + y, 17);
+      if (k < 0.7) continue;
+      ctx.fillStyle = 'rgba(48, 28, 13, 0.5)';
+      ctx.fillRect(x, y + 4, 3, 2);
+    }
+  }
+
+  // Pared del fondo con tablas verticales.
+  const wallGrad = ctx.createLinearGradient(0, 0, 0, wallH);
+  wallGrad.addColorStop(0, '#432b1a');
+  wallGrad.addColorStop(0.62, '#372216');
+  wallGrad.addColorStop(1, '#2a1a10');
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 0, W, wallH);
+  for (let x = 18; x < W; x += 26) {
+    ctx.fillStyle = 'rgba(22, 12, 6, 0.45)';
+    ctx.fillRect(x, 0, 1, wallH);
+    ctx.fillStyle = 'rgba(146, 100, 58, 0.16)';
+    ctx.fillRect(x + 1, 0, 1, wallH);
+    const knot = hash2(x, 5);
+    if (knot > 0.6) {
+      ctx.fillStyle = 'rgba(26, 14, 7, 0.5)';
+      ctx.fillRect(x + 8, 34 + Math.floor(knot * 60), 3, 2);
+    }
+  }
+
+  // Viga superior y zócalo.
+  ctx.fillStyle = '#24150c';
+  ctx.fillRect(0, 0, W, 9);
+  ctx.fillStyle = '#54351f';
+  ctx.fillRect(0, 9, W, 3);
+  for (let x = 10; x < W; x += 34) {
+    ctx.fillStyle = 'rgba(20, 11, 5, 0.55)';
+    ctx.fillRect(x, 0, 3, 9);
+  }
+  ctx.fillStyle = '#24150c';
+  ctx.fillRect(0, wallH - 7, W, 7);
+  ctx.fillStyle = '#5d3d24';
+  ctx.fillRect(0, wallH - 7, W, 2);
+  ctx.fillStyle = 'rgba(16, 9, 4, 0.5)';
+  ctx.fillRect(0, wallH - 1, W, 1);
+
+  // Ventana al atardecer con cortinas y jardinera.
+  const wx = 94;
+  const wy = 26;
+  const ww = 84;
+  const wh = 60;
+  ctx.fillStyle = '#24140a';
+  ctx.fillRect(wx - 5, wy - 5, ww + 10, wh + 10);
+  const sky = ctx.createLinearGradient(0, wy, 0, wy + wh);
+  sky.addColorStop(0, '#6f87a8');
+  sky.addColorStop(0.55, '#e8a86a');
+  sky.addColorStop(1, '#f6d39a');
+  ctx.fillStyle = sky;
+  ctx.fillRect(wx, wy, ww, wh);
+  ctx.fillStyle = '#2f6a74';
+  ctx.fillRect(wx, wy + wh - 20, ww, 20);
+  ctx.fillStyle = '#fce9b8';
+  ctx.fillRect(wx + 52, wy + wh - 26, 12, 4);
+  ctx.fillStyle = 'rgba(255, 220, 150, 0.5)';
+  ctx.fillRect(wx + 50, wy + wh - 22, 16, 8);
+  // Silueta de la arboleda lejana.
+  ctx.fillStyle = 'rgba(38, 52, 46, 0.7)';
+  ctx.fillRect(wx + 6, wy + wh - 22, 16, 3);
+  ctx.fillRect(wx + 12, wy + wh - 27, 3, 6);
+  ctx.fillRect(wx + 20, wy + wh - 25, 2, 4);
+  // Reflejo y marcos.
+  ctx.fillStyle = 'rgba(255, 245, 214, 0.28)';
+  ctx.fillRect(wx + 2, wy + 2, 20, 1);
+  ctx.fillStyle = '#3b2415';
+  ctx.fillRect(wx + ww / 2 - 1, wy, 2, wh);
+  ctx.fillRect(wx, wy + wh / 2 - 1, ww, 2);
+  // Cortinas de lino.
+  ctx.fillStyle = '#a65c3a';
+  ctx.fillRect(wx - 11, wy - 8, 9, wh + 18);
+  ctx.fillRect(wx + ww + 2, wy - 8, 9, wh + 18);
+  ctx.fillStyle = '#c07a4e';
+  ctx.fillRect(wx - 9, wy - 6, 3, wh + 14);
+  ctx.fillRect(wx + ww + 4, wy - 6, 3, wh + 14);
+  ctx.fillStyle = 'rgba(70, 32, 16, 0.55)';
+  for (let y = wy - 2; y < wy + wh + 8; y += 7) {
+    ctx.fillRect(wx - 7, y, 2, 3);
+    ctx.fillRect(wx + ww + 6, y, 2, 3);
+  }
+  // Jardinera de la ventana.
+  ctx.fillStyle = '#4d3320';
+  ctx.fillRect(wx - 8, wy + wh + 2, ww + 16, 8);
+  ctx.fillStyle = '#77502f';
+  ctx.fillRect(wx - 7, wy + wh + 2, ww + 14, 2);
+  const blooms = ['#f9a8d4', '#fde68a', '#f8fafc', '#f472b6'];
+  for (let i = 0; i < 8; i++) {
+    ctx.fillStyle = '#3f7a3c';
+    ctx.fillRect(wx - 4 + i * 12, wy + wh - 4, 2, 6);
+    ctx.fillStyle = blooms[i % blooms.length];
+    ctx.fillRect(wx - 6 + i * 12, wy + wh - 7, 5, 3);
+  }
+
+  // Haz de luz que cae de la ventana sobre el suelo.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const beam = ctx.createLinearGradient(wx + 10, wy + wh, wx + 40, H);
+  beam.addColorStop(0, 'rgba(255, 214, 150, 0.2)');
+  beam.addColorStop(1, 'rgba(255, 190, 120, 0)');
+  ctx.fillStyle = beam;
+  ctx.beginPath();
+  ctx.moveTo(wx + 4, wy + wh);
+  ctx.lineTo(wx + ww - 4, wy + wh);
+  ctx.lineTo(wx + ww + 46, H);
+  ctx.lineTo(wx - 40, H);
+  ctx.closePath();
+  ctx.fill();
+  const pool = ctx.createRadialGradient(wx + 36, 212, 6, wx + 36, 212, 104);
+  pool.addColorStop(0, 'rgba(255, 200, 130, 0.22)');
+  pool.addColorStop(1, 'rgba(255, 190, 120, 0)');
+  ctx.fillStyle = pool;
+  ctx.fillRect(wx - 70, 108, 210, 190);
+  ctx.restore();
+
+  // Retrato familiar y estante con frascos.
+  ctx.fillStyle = '#2a180c';
+  ctx.fillRect(256, 32, 50, 42);
+  ctx.fillStyle = '#6d4a2b';
+  ctx.fillRect(258, 34, 46, 38);
+  ctx.fillStyle = '#d9c39a';
+  ctx.fillRect(262, 38, 38, 30);
+  ctx.fillStyle = 'rgba(96, 72, 46, 0.6)';
+  ctx.fillRect(263, 39, 36, 3);
+  ctx.fillStyle = '#4a3120';
+  ctx.fillRect(272, 50, 6, 14);
+  ctx.fillRect(273, 44, 4, 5);
+  ctx.fillRect(286, 52, 6, 12);
+  ctx.fillRect(288, 46, 3, 5);
+  ctx.fillStyle = 'rgba(40, 24, 12, 0.4)';
+  ctx.fillRect(262, 62, 38, 1);
+
+  ctx.fillStyle = '#3a2414';
+  ctx.fillRect(318, 40, 62, 3);
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(318, 43, 62, 4);
+  ctx.fillRect(322, 47, 3, 6);
+  ctx.fillRect(372, 47, 3, 6);
+  const jarColors = ['#9bbf7a', '#d8a24a', '#b45a3c'];
+  for (let i = 0; i < 3; i++) {
+    const jx = 326 + i * 17;
+    ctx.fillStyle = jarColors[i];
+    ctx.fillRect(jx, 31, 9, 10);
+    ctx.fillStyle = 'rgba(255, 248, 220, 0.45)';
+    ctx.fillRect(jx + 1, 32, 2, 6);
+    ctx.fillStyle = '#5c3a20';
+    ctx.fillRect(jx - 1, 29, 11, 3);
+  }
+
+  // Lámpara colgante de aceite.
+  ctx.fillStyle = '#241408';
+  ctx.fillRect(239, 8, 2, 18);
+  ctx.fillStyle = '#8a5f30';
+  ctx.beginPath();
+  ctx.moveTo(232, 26);
+  ctx.lineTo(248, 26);
+  ctx.lineTo(244, 34);
+  ctx.lineTo(236, 34);
+  ctx.closePath();
+  ctx.fill();
+  const flicker = reducedMotion ? 0.9 : 0.82 + Math.sin(elapsed * 4.7) * 0.1 + Math.sin(elapsed * 11.3) * 0.04;
+  ctx.fillStyle = `rgba(255, 214, 138, ${flicker.toFixed(2)})`;
+  ctx.fillRect(237, 34, 6, 4);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const lampGlow = ctx.createRadialGradient(240, 36, 2, 240, 36, 96);
+  lampGlow.addColorStop(0, `rgba(255, 208, 132, ${(0.34 * flicker).toFixed(2)})`);
+  lampGlow.addColorStop(1, 'rgba(255, 190, 110, 0)');
+  ctx.fillStyle = lampGlow;
+  ctx.fillRect(144, -60, 192, 192);
+  ctx.restore();
+
+  // Alfombra tejida.
+  ctx.fillStyle = '#6f3b2b';
+  ctx.fillRect(154, 198, 168, 76);
+  ctx.fillStyle = '#d9be8c';
+  ctx.fillRect(154, 198, 168, 3);
+  ctx.fillRect(154, 271, 168, 3);
+  ctx.fillRect(154, 198, 3, 76);
+  ctx.fillRect(319, 198, 3, 76);
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#a5653c' : '#8b4d31';
+    ctx.fillRect(164 + i * 40, 208, 26, 56);
+  }
+  ctx.fillStyle = 'rgba(246, 226, 186, 0.5)';
+  for (let i = 0; i < 4; i++) {
+    const dx = 177 + i * 40;
+    ctx.fillRect(dx, 220, 3, 3);
+    ctx.fillRect(dx - 4, 230, 11, 2);
+    ctx.fillRect(dx + 1, 238, 3, 3);
+    ctx.fillRect(dx - 4, 248, 11, 2);
+  }
+
+  // Puerta al sur, con umbral cálido.
+  const dx0 = 206;
+  const dy0 = 258;
+  ctx.fillStyle = '#1c0f07';
+  ctx.fillRect(dx0 - 6, dy0 - 6, 74, 48);
+  ctx.fillStyle = '#4f3320';
+  ctx.fillRect(dx0 - 3, dy0 - 3, 68, 45);
+  ctx.fillStyle = '#6b482c';
+  ctx.fillRect(dx0, dy0, 62, 42);
+  for (let y = dy0 + 4; y < 296; y += 8) {
+    ctx.fillStyle = 'rgba(46, 27, 14, 0.5)';
+    ctx.fillRect(dx0 + 2, y, 58, 1);
+  }
+  ctx.fillStyle = '#8a5f3a';
+  ctx.fillRect(dx0 + 31, dy0 + 2, 1, 40);
+  ctx.fillStyle = '#d9a521';
+  ctx.fillRect(dx0 + 48, dy0 + 22, 3, 4);
+  ctx.fillStyle = 'rgba(255, 236, 160, 0.7)';
+  ctx.fillRect(dx0 + 48, dy0 + 22, 1, 1);
+  // Umbral de piedra y felpudo.
+  ctx.fillStyle = '#8d8779';
+  ctx.fillRect(dx0 - 8, 296, 78, 4);
+  ctx.fillStyle = 'rgba(255, 244, 220, 0.3)';
+  ctx.fillRect(dx0 - 8, 296, 76, 1);
+  ctx.fillStyle = '#7a5a38';
+  ctx.fillRect(dx0 + 4, 284, 54, 10);
+  ctx.fillStyle = '#96703f';
+  ctx.fillRect(dx0 + 5, 285, 52, 2);
+  ctx.fillStyle = 'rgba(52, 33, 19, 0.55)';
+  ctx.fillRect(dx0 + 5, 289, 52, 1);
+}
+
+function drawCabinFurniture(ctx: CanvasRenderingContext2D, elapsed: number, reducedMotion: boolean): void {
+  // Cama de madera junto a la pared oeste.
+  const bx = 30;
+  const by = 150;
+  const bw = 112;
+  const bh = 114;
+  ctx.fillStyle = 'rgba(20, 12, 6, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(bx + bw * 0.55, by + bh - 2, bw * 0.62, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#3d2615';
+  ctx.fillRect(bx, by, 9, bh);
+  ctx.fillRect(bx + 2, by + bh - 8, bw - 2, 8);
+  ctx.fillStyle = '#6b482a';
+  ctx.fillRect(bx + 1, by + 2, 3, bh - 12);
+  ctx.fillRect(bx + 8, by + 18, bw - 12, bh - 30);
+  ctx.fillStyle = '#dfd0ae';
+  ctx.fillRect(bx + 10, by + 20, bw - 16, bh - 36);
+  ctx.fillStyle = '#f2e9d2';
+  ctx.fillRect(bx + 12, by + 24, 28, 18);
+  ctx.fillStyle = 'rgba(180, 160, 122, 0.5)';
+  ctx.fillRect(bx + 12, by + 40, 28, 2);
+  // Edredón de retales.
+  ctx.fillStyle = '#4f7a54';
+  ctx.fillRect(bx + 40, by + 22, bw - 46, bh - 40);
+  ctx.fillStyle = '#63976a';
+  for (let y = by + 28; y < by + bh - 24; y += 14) {
+    ctx.fillRect(bx + 42, y, bw - 50, 4);
+  }
+  ctx.fillStyle = '#c96f4a';
+  ctx.fillRect(bx + 56, by + 48, 22, 20);
+  ctx.fillStyle = '#e0a15a';
+  ctx.fillRect(bx + 60, by + 52, 14, 12);
+  ctx.fillStyle = 'rgba(30, 18, 10, 0.35)';
+  ctx.fillRect(bx + 40, by + bh - 24, bw - 46, 2);
+  // Almohada y cabecero.
+  ctx.fillStyle = '#5c3a21';
+  ctx.fillRect(bx + 6, by + 14, bw - 10, 3);
+  ctx.fillStyle = '#8a6238';
+  ctx.fillRect(bx + 6, by + 17, bw - 12, 2);
+  ctx.fillStyle = '#3a2414';
+  for (let i = 0; i < 5; i++) ctx.fillRect(bx + 20 + i * 18, by + 4, 2, 12);
+
+  // Mesa camilla con mantel, radio y café.
+  const tx = 318;
+  const ty = 148;
+  const tw = 86;
+  const th = 58;
+  ctx.fillStyle = 'rgba(20, 12, 6, 0.26)';
+  ctx.beginPath();
+  ctx.ellipse(tx + tw / 2, ty + th, tw * 0.55, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#4d3320';
+  ctx.fillRect(tx + 4, ty + 10, 6, th - 8);
+  ctx.fillRect(tx + tw - 10, ty + 10, 6, th - 8);
+  ctx.fillStyle = '#7d5738';
+  ctx.fillRect(tx, ty, tw, 12);
+  ctx.fillStyle = '#9a6f45';
+  ctx.fillRect(tx, ty, tw, 2);
+  // Mantel de cuadros.
+  ctx.fillStyle = '#e7d4ae';
+  ctx.fillRect(tx + 4, ty + 10, tw - 8, 20);
+  ctx.fillStyle = 'rgba(178, 84, 64, 0.65)';
+  for (let x = tx + 10; x < tx + tw - 8; x += 12) ctx.fillRect(x, ty + 10, 4, 20);
+  ctx.fillRect(tx + 4, ty + 18, tw - 8, 3);
+  // Cafetera esmaltada.
+  ctx.fillStyle = '#3f5f6b';
+  ctx.fillRect(tx + 12, ty - 2, 12, 10);
+  ctx.fillStyle = '#5c8491';
+  ctx.fillRect(tx + 13, ty - 1, 10, 2);
+  ctx.fillStyle = '#2b424c';
+  ctx.fillRect(tx + 24, ty + 1, 3, 5);
+  ctx.fillStyle = '#c8dbe0';
+  ctx.fillRect(tx + 15, ty + 7, 6, 2);
+  // Radio de transistores.
+  ctx.fillStyle = '#3a2414';
+  ctx.fillRect(tx + 34, ty - 4, 22, 14);
+  ctx.fillStyle = '#a8732f';
+  ctx.fillRect(tx + 35, ty - 3, 20, 12);
+  ctx.fillStyle = '#f0d9a8';
+  ctx.fillRect(tx + 37, ty - 1, 10, 5);
+  ctx.fillStyle = '#2a1a10';
+  for (let i = 0; i < 4; i++) ctx.fillRect(tx + 38 + i * 2, ty + 6, 1, 2);
+  ctx.fillStyle = '#c9b27c';
+  ctx.fillRect(tx + 50, ty + 4, 3, 3);
+  ctx.fillStyle = '#8e8a80';
+  ctx.fillRect(tx + 55, ty - 12, 1, 9);
+  // Taza y plato.
+  ctx.fillStyle = '#e8e2d2';
+  ctx.fillRect(tx + 62, ty + 2, 8, 5);
+  ctx.fillStyle = '#b7ad96';
+  ctx.fillRect(tx + 63, ty + 7, 9, 2);
+  ctx.fillStyle = '#e8e2d2';
+  ctx.fillRect(tx + 69, ty + 3, 2, 2);
+  // Silla arrimada.
+  ctx.fillStyle = '#5c3a21';
+  ctx.fillRect(tx + 26, ty + 44, 24, 4);
+  ctx.fillRect(tx + 26, ty + 48, 3, 16);
+  ctx.fillRect(tx + 47, ty + 48, 3, 16);
+  ctx.fillStyle = '#7d5530';
+  ctx.fillRect(tx + 26, ty + 30, 3, 16);
+  ctx.fillRect(tx + 27, ty + 32, 22, 3);
+
+  // Guitarra acústica colgada sobre la cama.
+  drawCabinGuitar(ctx);
+
+  // Teclado musical sobre su banco, bajo el retrato familiar.
+  drawCabinKeyboard(ctx);
+
+  // Cocina económica contra la pared este.
+  const kx = 404;
+  const ky = 112;
+  const kw = 64;
+  const kh = 92;
+  ctx.fillStyle = 'rgba(20, 12, 6, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(kx + kw / 2, ky + kh, kw * 0.6, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#3e2a1a';
+  ctx.fillRect(kx, ky + 8, kw, kh - 8);
+  ctx.fillStyle = '#937f68';
+  ctx.fillRect(kx - 2, ky + 4, kw + 4, 8);
+  ctx.fillStyle = '#b5a48c';
+  ctx.fillRect(kx - 2, ky + 4, kw + 4, 2);
+  ctx.fillStyle = '#2f2014';
+  ctx.fillRect(kx + 4, ky + 16, kw - 8, 34);
+  // Hornillas y caldero.
+  ctx.fillStyle = '#5a5148';
+  ctx.fillRect(kx + 8, ky + 10, 20, 4);
+  ctx.fillRect(kx + 36, ky + 10, 20, 4);
+  ctx.fillStyle = '#1b1410';
+  ctx.fillRect(kx + 10, ky + 8, 16, 4);
+  ctx.fillRect(kx + 38, ky + 8, 16, 4);
+  ctx.fillStyle = '#3b3330';
+  ctx.beginPath();
+  ctx.ellipse(kx + 18, ky + 2, 11, 8, 0, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#6b615a';
+  ctx.fillRect(kx + 8, ky - 6, 20, 2);
+  ctx.fillStyle = '#2a221d';
+  ctx.fillRect(kx + 4, ky - 8, 4, 4);
+  // Fuego bajo el caldero.
+  const ember = reducedMotion ? 0.7 : 0.55 + Math.sin(elapsed * 6.1) * 0.2;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const emberGlow = ctx.createRadialGradient(kx + 18, ky + 4, 1, kx + 18, ky + 4, 34);
+  emberGlow.addColorStop(0, `rgba(255, 142, 60, ${(0.4 * ember).toFixed(2)})`);
+  emberGlow.addColorStop(1, 'rgba(255, 120, 40, 0)');
+  ctx.fillStyle = emberGlow;
+  ctx.fillRect(kx - 18, ky - 32, 72, 72);
+  ctx.restore();
+  ctx.fillStyle = `rgba(255, 176, 92, ${ember.toFixed(2)})`;
+  ctx.fillRect(kx + 12, ky + 4, 14, 3);
+  // Puertas del armario y tiradores.
+  ctx.fillStyle = '#4f3722';
+  ctx.fillRect(kx + 6, ky + 56, 22, 26);
+  ctx.fillRect(kx + 34, ky + 56, 22, 26);
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(kx + 8, ky + 58, 18, 22);
+  ctx.fillRect(kx + 36, ky + 58, 18, 22);
+  ctx.fillStyle = '#d9a521';
+  ctx.fillRect(kx + 24, ky + 68, 2, 3);
+  ctx.fillRect(kx + 36, ky + 68, 2, 3);
+  // Vapor de la tetera.
+  if (!reducedMotion) {
+    for (let i = 0; i < 3; i++) {
+      const st = (elapsed * 0.42 + i / 3) % 1;
+      ctx.fillStyle = `rgba(236, 232, 220, ${(0.22 * (1 - st)).toFixed(2)})`;
+      ctx.fillRect(Math.round(kx + 16 + Math.sin(st * 6 + i) * 5), Math.round(ky - 14 - st * 26), 2 + Math.round(st * 3), 2);
+    }
+  }
+  // Estante con cacharros de cobre.
+  ctx.fillStyle = '#3a2414';
+  ctx.fillRect(kx - 2, 74, kw + 6, 3);
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(kx - 2, 77, kw + 6, 3);
+  for (let i = 0; i < 3; i++) {
+    const px = kx + 4 + i * 20;
+    ctx.fillStyle = i % 2 === 0 ? '#b06a3a' : '#8f8a7c';
+    ctx.fillRect(px, 62, 16, 12);
+    ctx.fillStyle = 'rgba(255, 226, 180, 0.45)';
+    ctx.fillRect(px + 1, 63, 3, 9);
+    ctx.fillStyle = '#3a2414';
+    ctx.fillRect(px + 5, 58, 2, 4);
+  }
+}
+
+/** Guitarra acústica de la familia, colgada de un clavo sobre la cama. */
+function drawCabinGuitar(ctx: CanvasRenderingContext2D): void {
+  const cx = 52;
+  ctx.save();
+
+  // Clavo y cordón de cuero.
+  ctx.fillStyle = '#1d1008';
+  ctx.fillRect(cx - 1, 48, 3, 5);
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(cx, 52, 1, 6);
+
+  // Mástil y pala.
+  ctx.fillStyle = '#2a170b';
+  ctx.fillRect(cx - 3, 58, 7, 38);
+  ctx.fillStyle = '#8a5a2e';
+  ctx.fillRect(cx - 2, 58, 5, 38);
+  ctx.fillStyle = '#c08a4e';
+  ctx.fillRect(cx - 2, 58, 1, 38);
+  ctx.fillStyle = '#2a170b';
+  ctx.fillRect(cx - 5, 54, 11, 9);
+  ctx.fillStyle = '#5c3a1f';
+  ctx.fillRect(cx - 4, 55, 9, 7);
+  // Clavijas doradas.
+  ctx.fillStyle = '#d9b45a';
+  ctx.fillRect(cx - 7, 56, 2, 2);
+  ctx.fillRect(cx - 7, 60, 2, 2);
+  ctx.fillRect(cx + 6, 56, 2, 2);
+  ctx.fillRect(cx + 6, 60, 2, 2);
+  // Trastes.
+  ctx.fillStyle = '#c9ab7c';
+  for (let y = 64; y < 94; y += 6) ctx.fillRect(cx - 2, y, 5, 1);
+
+  // Caja acústica: dos lóbulos superpuestos con sombra lateral.
+  ctx.fillStyle = 'rgba(18, 10, 4, 0.4)';
+  ctx.beginPath();
+  ctx.ellipse(cx + 2, 108, 15, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#3a2110';
+  ctx.beginPath();
+  ctx.ellipse(cx, 106, 15, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx, 88, 11, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Tapa de abeto cálida.
+  ctx.fillStyle = '#b5753a';
+  ctx.beginPath();
+  ctx.ellipse(cx, 105, 13, 16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx, 88, 9, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#d69a58';
+  ctx.beginPath();
+  ctx.ellipse(cx - 3, 103, 7, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#a86733';
+  ctx.beginPath();
+  ctx.ellipse(cx + 5, 108, 6, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Boca, roseta y puente.
+  ctx.fillStyle = '#1c0d05';
+  ctx.beginPath();
+  ctx.ellipse(cx, 92, 5, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(240, 206, 150, 0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(cx, 92, 7, 7, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#3a2110';
+  ctx.fillRect(cx - 6, 114, 13, 3);
+  ctx.fillStyle = '#e8d8b8';
+  ctx.fillRect(cx - 6, 114, 13, 1);
+
+  // Cuerdas.
+  ctx.fillStyle = 'rgba(232, 226, 206, 0.55)';
+  ctx.fillRect(cx - 1, 60, 1, 54);
+  ctx.fillRect(cx + 1, 60, 1, 54);
+  ctx.fillRect(cx + 3, 64, 1, 50);
+
+  // Golpeador y reflejo de la lámpara.
+  ctx.fillStyle = 'rgba(60, 30, 12, 0.55)';
+  ctx.beginPath();
+  ctx.ellipse(cx + 8, 100, 4, 7, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 220, 160, 0.28)';
+  ctx.fillRect(cx - 11, 82, 2, 12);
+
+  ctx.restore();
+}
+
+/** Teclado musical de madera con banco, en el rincón del retrato. */
+function drawCabinKeyboard(ctx: CanvasRenderingContext2D): void {
+  const x = 252;
+  const y = 100;
+  const w = 56;
+
+  ctx.save();
+
+  // Sombra sobre la pared.
+  ctx.fillStyle = 'rgba(16, 9, 4, 0.35)';
+  ctx.fillRect(x - 2, y + 24, w + 4, 4);
+
+  // Patas de madera hasta el zócalo.
+  ctx.fillStyle = '#3a2414';
+  ctx.fillRect(x + 4, y + 16, 4, 17);
+  ctx.fillRect(x + w - 8, y + 16, 4, 17);
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(x + 5, y + 17, 2, 15);
+  ctx.fillRect(x + w - 7, y + 17, 2, 15);
+
+  // Mueble con tapa inclinada y ribete claro.
+  ctx.fillStyle = '#1f120a';
+  ctx.fillRect(x - 1, y - 1, w + 2, 19);
+  ctx.fillStyle = '#7a4a26';
+  ctx.fillRect(x, y, w, 17);
+  ctx.fillStyle = '#9c6535';
+  ctx.fillRect(x, y, w, 3);
+  ctx.fillStyle = '#5c3519';
+  ctx.fillRect(x, y + 14, w, 3);
+  ctx.fillStyle = 'rgba(255, 224, 168, 0.35)';
+  ctx.fillRect(x + 1, y, w - 2, 1);
+
+  // Fieltro rojo bajo las teclas.
+  ctx.fillStyle = '#8f2f24';
+  ctx.fillRect(x + 3, y + 4, w - 6, 3);
+
+  // Teclas blancas con separaciones y teclas negras en patrón de piano.
+  const keysY = y + 6;
+  const keysW = w - 6;
+  ctx.fillStyle = '#f0e6cf';
+  ctx.fillRect(x + 3, keysY, keysW, 7);
+  ctx.fillStyle = 'rgba(120, 100, 70, 0.45)';
+  for (let i = 1; i < 14; i++) {
+    ctx.fillRect(x + 3 + Math.round((i * keysW) / 14), keysY, 1, 7);
+  }
+  // Negras: dos, tres, dos, tres...
+  const blackPattern = [1, 2, 4, 5, 6, 8, 9, 11, 12, 13];
+  ctx.fillStyle = '#241a12';
+  for (const k of blackPattern) {
+    const kx = x + 3 + Math.round((k * keysW) / 14) - 1;
+    ctx.fillRect(kx, keysY, 2, 4);
+  }
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.fillRect(x + 3, keysY, keysW, 1);
+
+  // Nombre grabado en latón y un par de perillas.
+  ctx.fillStyle = '#d9b45a';
+  ctx.fillRect(x + w - 15, y + 1, 11, 2);
+  ctx.fillStyle = '#3a2414';
+  ctx.fillRect(x + 5, y + 1, 2, 2);
+  ctx.fillRect(x + 10, y + 1, 2, 2);
+
+  // Reflejo cálido de la lámpara sobre el mueble.
+  ctx.fillStyle = 'rgba(255, 214, 150, 0.16)';
+  ctx.fillRect(x + 4, y + 2, 20, 2);
+
+  ctx.restore();
+}
+
+/** Mochila de lona colgada del clavo, con brillo suave para que se descubra. */
+function drawCabinBackpack(ctx: CanvasRenderingContext2D, elapsed: number, reducedMotion: boolean): void {
+  const { x, y } = ISLA_NATAL_CABIN.backpack;
+  const bob = reducedMotion ? 0 : Math.sin(elapsed * 1.6) * 0.6;
+  ctx.save();
+  ctx.translate(0, Math.round(bob));
+  // Clavo y correas.
+  ctx.fillStyle = '#241408';
+  ctx.fillRect(x - 1, y - 12, 3, 5);
+  ctx.fillStyle = '#8a6a45';
+  ctx.fillRect(x, y - 9, 1, 3);
+  ctx.fillStyle = '#6b4728';
+  ctx.fillRect(x - 9, y - 8, 3, 14);
+  ctx.fillRect(x + 7, y - 8, 3, 14);
+  // Cuerpo de lona.
+  ctx.fillStyle = 'rgba(20, 12, 6, 0.35)';
+  ctx.fillRect(x - 11, y - 6, 24, 32);
+  ctx.fillStyle = '#8c5835';
+  ctx.fillRect(x - 12, y - 7, 24, 31);
+  ctx.fillStyle = '#a86c42';
+  ctx.fillRect(x - 10, y - 5, 20, 9);
+  ctx.fillStyle = '#72452a';
+  ctx.fillRect(x - 12, y + 4, 24, 3);
+  // Solapa y hebilla.
+  ctx.fillStyle = '#9c6239';
+  ctx.fillRect(x - 10, y + 8, 20, 6);
+  ctx.fillStyle = '#d9a521';
+  ctx.fillRect(x - 2, y + 10, 4, 3);
+  ctx.fillStyle = '#f4d27a';
+  ctx.fillRect(x - 1, y + 10, 1, 1);
+  // Bolsillo y costuras.
+  ctx.fillStyle = '#a06c45';
+  ctx.fillRect(x - 7, y + 15, 14, 7);
+  ctx.fillStyle = '#7a4f31';
+  ctx.fillRect(x - 7, y + 15, 14, 1);
+  ctx.fillStyle = 'rgba(255, 224, 180, 0.35)';
+  ctx.fillRect(x - 11, y - 6, 1, 24);
+  ctx.fillRect(x - 11, y + 14, 23, 1);
+  // Asa superior.
+  ctx.fillStyle = '#5c3a22';
+  ctx.fillRect(x - 4, y - 12, 8, 2);
+  ctx.fillRect(x - 6, y - 10, 2, 4);
+  ctx.fillRect(x + 4, y - 10, 2, 4);
+  ctx.restore();
+}
+
+export function renderIslaNatalCabin(params: IslaNatalCabinRenderParams): void {
+  const { ctx, vw, vh, camera, elapsed, reducedMotion } = params;
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#080604';
+  ctx.fillRect(0, 0, vw, vh);
+
+  ctx.save();
+  ctx.translate(-Math.round(camera.x), -Math.round(camera.y));
+  drawCabinShell(ctx, elapsed, reducedMotion);
+  drawCabinFurniture(ctx, elapsed, reducedMotion);
+  if (params.backpackOnHook) drawCabinBackpack(ctx, elapsed, reducedMotion);
+  drawPlayer(ctx, params, elapsed);
+  if (params.prompt) {
+    const bob = reducedMotion ? 0 : (Math.floor(elapsed * 3.2) % 2 === 0 ? 0 : -2);
+    drawPromptBadge(ctx, params.prompt, bob);
+  }
+  ctx.restore();
+
+  // Calidez interior: viñeta de madera y polvo flotando en la luz.
+  const vig = ctx.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.26, vw / 2, vh / 2, Math.max(vw, vh) * 0.72);
+  vig.addColorStop(0, 'rgba(24, 12, 4, 0)');
+  vig.addColorStop(1, 'rgba(12, 6, 2, 0.62)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, vw, vh);
+  const grade = ctx.createLinearGradient(0, 0, 0, vh);
+  grade.addColorStop(0, 'rgba(255, 176, 96, 0.05)');
+  grade.addColorStop(0.5, 'rgba(255, 150, 80, 0.015)');
+  grade.addColorStop(1, 'rgba(40, 18, 8, 0.16)');
+  ctx.fillStyle = grade;
+  ctx.fillRect(0, 0, vw, vh);
+}
+
+/* ------------------------------------------------------------------ */
 /* CUADRO COMPLETO                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -2890,15 +3691,11 @@ export function renderIslaNatalFrame(params: IslaNatalRenderParams): void {
 
   ySorted.push({ sortY: HUT_POS.y + 96, draw: () => drawHut(ctx, elapsed, reducedMotion) });
   ySorted.push({ sortY: SHED_POS.y + 124, draw: () => drawShed(ctx, elapsed, arcadeState, reducedMotion) });
-  ySorted.push({
-    sortY: 556,
-    draw: () => drawGbcWoodenSign(ctx, 748, 556, 'PUERTO NORTE', true, 'ISLA NATAL · NORTE'),
-  });
-  for (const sign of NATAL_ZONE_SIGNS) {
-    if (!isWorldBoxVisible(sign.x - 40, sign.y - 52, 80, 62, camX, camY, vw, vh)) continue;
+  for (const sign of ISLA_NATAL_SIGNS) {
+    if (!isWorldBoxVisible(sign.x - 20, sign.y - 30, 40, 40, camX, camY, vw, vh)) continue;
     ySorted.push({
       sortY: sign.y + 1,
-      draw: () => drawGbcWoodenSign(ctx, sign.x, sign.y, sign.label, true, sign.kicker),
+      draw: () => drawGbcWoodenSign(ctx, sign.x, sign.y),
     });
   }
   ySorted.push({ sortY: SIGN_POS.y + 2, draw: () => drawSign(ctx) });

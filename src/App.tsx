@@ -58,6 +58,7 @@ import {
   discoverInvestigationClue,
   discoverRpgSecret,
   grantPongBoardAbility,
+  grantInventoryItems,
   loadProgressState,
   markCeremonyCompleted,
   markGameStarted,
@@ -1015,6 +1016,10 @@ export default function App() {
     managerRef.current?.transitionTo('state-archipelago');
   }, []);
 
+  const handleGrantIslaNatalItems = useCallback((itemIds: string[]) => {
+    setProgressState((prev) => grantInventoryItems(prev, itemIds));
+  }, []);
+
   const handleOpenMenuOptions = useCallback(() => {
     retroAudio.uiClick();
     setCodeModalOpen(false);
@@ -1597,6 +1602,7 @@ export default function App() {
               narrativeEvents={progressState.island70s.narrativeEvents}
               onRecordNarrativeEvent={handleRecordIslaNatalEvent}
               onDepartToOrigin={handleDepartIslaNatal}
+              onGrantInventoryItems={handleGrantIslaNatalItems}
             />
           </SceneGuard>
         )}

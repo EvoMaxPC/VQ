@@ -213,7 +213,8 @@ interface InteractivePromptTarget {
     | 'castle-boss-hit'
     | 'castle-boss-conduit'
     | 'castle-ship-launch'
-    | 'night-driver-cabinet';
+    | 'night-driver-cabinet'
+    | 'volcanic-guard';
   id: string;
   label: string;
   actionLabel: string;
@@ -277,6 +278,55 @@ function isIslandPowerUnlocked(power: IslandPowerId, progress: PixelverseProgres
       return items.includes('item-sonar-profundidad');
   }
 }
+
+/* Chasis compacto del dock de poderes (solo presentación del HUD superior). */
+const POWER_DOCK_CSS = `
+.pv-powerdock{pointer-events:auto;max-width:calc(100vw - 1rem);filter:drop-shadow(0 10px 18px rgba(2,6,20,.55));}
+.pv-powerdock__frame{position:relative;display:flex;align-items:stretch;gap:6px;padding:5px 6px 5px 7px;border:1px solid #3c4a61;border-radius:11px;background:linear-gradient(180deg,rgba(36,48,68,.97) 0%,rgba(13,20,35,.98) 48%,rgba(6,10,20,.99) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -2px 0 rgba(0,0,0,.55),0 0 0 2px rgba(3,7,15,.75),0 0 22px rgba(0,243,255,.06);}
+.pv-powerdock__frame:before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(253,224,71,.45),rgba(0,243,255,.30),transparent);pointer-events:none;}
+.pv-powerdock__frame:after{content:"";position:absolute;inset:2px;border:1px solid rgba(148,163,184,.10);border-radius:8px;pointer-events:none;}
+.pv-powerdock__label{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 10px 0 6px;border-right:1px solid rgba(148,163,184,.20);}
+.pv-powerdock__labelTop{display:flex;align-items:center;gap:6px;}
+.pv-powerdock__gem{width:7px;height:7px;flex:none;transform:rotate(45deg);background:linear-gradient(135deg,#fde047,#f59e0b);box-shadow:0 0 8px rgba(250,204,21,.75);}
+.pv-powerdock__labelText{font:700 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:#fde047;}
+.pv-powerdock__labelSub{font:700 6.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.24em;color:#8b9bb2;}
+.pv-powerdock__slots{display:flex;align-items:stretch;gap:5px;}
+.pv-powerdock__side{display:flex;align-items:stretch;gap:5px;padding-left:1px;}
+.pv-slot{--slot:#94a3b8;position:relative;display:flex;align-items:center;gap:7px;min-width:108px;padding:6px 9px 8px 7px;border:1px solid rgba(148,163,184,.26);border-radius:7px;background:linear-gradient(180deg,rgba(30,41,59,.92),rgba(15,23,42,.96));color:#cbd5e1;cursor:pointer;text-align:left;overflow:hidden;transition:transform .12s ease,border-color .12s ease,background .12s ease,box-shadow .12s ease;}
+.pv-slot:before{content:"";position:absolute;left:0;top:5px;bottom:5px;width:2px;border-radius:0 2px 2px 0;background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--slot) 85%,transparent),transparent);opacity:.85;pointer-events:none;}
+.pv-slot.is-active:before{opacity:0;}
+.pv-slot:hover:not(:disabled){transform:translateY(-1px);border-color:color-mix(in srgb,var(--slot) 55%,transparent);background:linear-gradient(180deg,rgba(41,56,80,.95),rgba(19,30,50,.97));}
+.pv-slot:active:not(:disabled){transform:translateY(0);}
+.pv-slot:focus-visible{outline:1px solid color-mix(in srgb,var(--slot) 75%,white 25%);outline-offset:1px;}
+.pv-slot.is-active{color:#0b1220;border-color:color-mix(in srgb,var(--slot) 68%,white 32%);background:linear-gradient(180deg,color-mix(in srgb,var(--slot) 82%,white 18%) 0%,var(--slot) 62%,color-mix(in srgb,var(--slot) 82%,black 18%) 100%);box-shadow:0 0 12px color-mix(in srgb,var(--slot) 45%,transparent),inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.18);}
+.pv-slot.is-locked{opacity:.52;}
+.pv-slot.is-locked:hover{transform:none;border-color:rgba(148,163,184,.26);background:linear-gradient(180deg,rgba(30,41,59,.92),rgba(15,23,42,.96));}
+.pv-slot__key{width:17px;height:17px;flex:none;display:grid;place-items:center;border-radius:3px;font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e2e8f0;background:rgba(2,6,20,.62);border:1px solid color-mix(in srgb,var(--slot) 40%,rgba(148,163,184,.45));box-shadow:inset 0 -1px 0 rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);}
+.pv-slot.is-active .pv-slot__key{color:var(--slot);background:rgba(2,6,20,.88);border-color:rgba(2,6,20,.55);box-shadow:none;}
+.pv-slot__body{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.pv-slot__name{font:700 10.5px/1.05 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;}
+.pv-slot__status{font:700 7.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.11em;color:#93a3b8;white-space:nowrap;}
+.pv-slot.is-active .pv-slot__status{color:rgba(9,16,29,.76);}
+.pv-slot__meter{position:absolute;left:7px;right:7px;bottom:3px;height:2px;border-radius:1px;background:rgba(148,163,184,.16);overflow:hidden;}
+.pv-slot__meterFill{display:block;height:100%;background:var(--slot);box-shadow:0 0 4px var(--slot);}
+.pv-slot.is-active .pv-slot__meter{background:rgba(2,6,20,.26);}
+.pv-slot.is-active .pv-slot__meterFill{background:rgba(255,255,255,.88);box-shadow:none;}
+.pv-modekey{display:flex;align-items:center;gap:5px;padding:0 7px;border:1px solid rgba(148,163,184,.26);border-radius:7px;background:linear-gradient(180deg,rgba(24,33,50,.94),rgba(11,17,30,.97));color:#cbd5e1;cursor:pointer;transition:border-color .12s ease,background .12s ease;}
+.pv-modekey:hover:not(:disabled){border-color:rgba(249,115,22,.55);background:linear-gradient(180deg,rgba(38,44,58,.96),rgba(16,22,36,.98));}
+.pv-modekey:disabled{opacity:.4;cursor:not-allowed;}
+.pv-modekey__key{width:17px;height:17px;flex:none;display:grid;place-items:center;border-radius:3px;font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#fdba74;background:rgba(2,6,20,.6);border:1px solid rgba(249,115,22,.45);}
+.pv-modekey__body{display:flex;flex-direction:column;gap:2px;text-align:left;}
+.pv-modekey__label{font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;color:#e2e8f0;}
+.pv-modekey__sub{font:700 6.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;color:#d8a87c;}
+.pv-exec{display:flex;align-items:center;gap:5px;padding:0 11px 0 8px;border-radius:7px;border:1px solid #fbbf24;background:linear-gradient(180deg,#fde68a 0%,#fbbf24 55%,#d97706 100%);color:#2a1a02;font:800 9.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.65),inset 0 -1px 0 rgba(120,53,15,.35),0 0 12px rgba(251,191,36,.22);transition:transform .12s ease,filter .12s ease;}
+.pv-exec:hover{filter:brightness(1.07);transform:translateY(-1px);}
+.pv-exec:active{transform:translateY(0);}
+.pv-exec__key{width:17px;height:17px;flex:none;display:grid;place-items:center;border-radius:3px;font:800 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#fde68a;background:rgba(42,26,2,.82);}
+.pv-exec svg{width:10px;height:10px;flex:none;}
+@media (max-width:1180px){.pv-slot{min-width:0;}}
+@media (max-width:980px){.pv-powerdock__label{display:none;}.pv-slot__name{font-size:9px;}.pv-slot__status{font-size:6.5px;}.pv-modekey__sub{display:none;}}
+@media (max-width:760px){.pv-slot{padding:5px 6px 7px 5px;gap:5px;}.pv-slot__name{font-size:8px;}.pv-slot__status{font-size:6px;letter-spacing:.05em;}.pv-exec{padding:0 8px;}}
+`;
 
 export function Origin70sIsland({
   skinColor,
@@ -3003,6 +3053,34 @@ export function Origin70sIsland({
         return;
       }
 
+      if (target.kind === 'volcanic-guard') {
+        const accepted = st.allUnlocked || st.progressState.island70s.talkedNpcIds.includes(VOLCANIC_GUARD_ID);
+        setNearbyPrompt(null);
+        if (accepted) {
+          retroAudio.npcBlip(1.16);
+          setActiveDialog({
+            category: 'GUARDIA ANTIFLAMA · BASTIÓN VOLCÁNICO',
+            title: 'El Guardia Naranja',
+            paragraphs: [
+              '«¡Qué crack! Me sorprende tu valentía. El paso queda abierto para ti.»',
+              '«Cruza con cuidado: los gabinetes del Bastión Volcánico siguen rugiendo entre la lava.»',
+            ],
+            hint: 'Sigue hacia el este para alcanzar los gabinetes Asteroids y Breakout.',
+            accentHex: '#f97316',
+          });
+          return;
+        }
+        playerPosBridgeRef.current.facingDir =
+          playerPosBridgeRef.current.x <= VOLCANIC_ARCADE_LAYOUT.guard.x ? 'right' : 'left';
+        volcanicGuardRetryLockedRef.current = false;
+        setVolcanicGuardChoice('yes');
+        volcanicGuardChoiceRef.current = 'yes';
+        setVolcanicGuardDialog('choice');
+        volcanicGuardDialogRef.current = 'choice';
+        retroAudio.npcBlip(0.86);
+        return;
+      }
+
       if (target.kind === 'npc') {
         const npc = ISLAND_NPCS.find((n) => n.id === target.id);
         if (!npc) return;
@@ -4285,29 +4363,6 @@ export function Origin70sIsland({
       playerPosBridgeRef.current.y = player.y;
       playerPosBridgeRef.current.facingDir = player.facingDir;
 
-      if (curArea === 'exterior-70s' && (flight.type === 'none' || flight.type === 'hoverboard') && st.glitchTrailCleared) {
-        const guardDistance = Math.hypot(player.x - VOLCANIC_ARCADE_LAYOUT.guard.x, player.y - VOLCANIC_ARCADE_LAYOUT.guard.y);
-        const accepted = st.allUnlocked || st.progressState.island70s.talkedNpcIds.includes(VOLCANIC_GUARD_ID);
-        if (guardDistance > 128) volcanicGuardRetryLockedRef.current = false;
-        if (!accepted && !volcanicGuardRetryLockedRef.current && volcanicGuardDialogRef.current === null && guardDistance < 68) {
-          for (const key of Object.keys(keys)) keys[key] = false;
-          virtualInputRef.current.up = false;
-          virtualInputRef.current.down = false;
-          virtualInputRef.current.left = false;
-          virtualInputRef.current.right = false;
-          virtualInputRef.current.sprint = false;
-          virtualInputRef.current.clickTarget = null;
-          player.facingDir = player.x <= VOLCANIC_ARCADE_LAYOUT.guard.x ? 'right' : 'left';
-          playerPosBridgeRef.current.facingDir = player.facingDir;
-          setVolcanicGuardChoice('yes');
-          volcanicGuardChoiceRef.current = 'yes';
-          setVolcanicGuardDialog('choice');
-          volcanicGuardDialogRef.current = 'choice';
-          setNearbyPrompt(null);
-          retroAudio.npcBlip(0.86);
-        }
-      }
-
       // Evaluar losetas de presión si estamos en un interior con acertijo
       if (curArea !== 'exterior-70s') {
         const subSpec = SUB_AREAS[curArea];
@@ -4765,6 +4820,18 @@ export function Origin70sIsland({
               x: arcade.x, y: arcade.y + 20, accentHex: arcade.accent,
             }, 86);
           }
+
+          const guardApproved =
+            st.allUnlocked || st.progressState.island70s.talkedNpcIds.includes(VOLCANIC_GUARD_ID);
+          consider({
+            kind: 'volcanic-guard',
+            id: VOLCANIC_GUARD_ID,
+            label: 'Guardia Antiflamas · Bastión Volcánico',
+            actionLabel: guardApproved ? 'Saludar al Guardia' : 'Hablar con el Guardia',
+            x: VOLCANIC_ARCADE_LAYOUT.guard.x,
+            y: VOLCANIC_ARCADE_LAYOUT.guard.y,
+            accentHex: '#f97316',
+          }, 84);
 
           const swordExtracted = st.progressState.rpg.discoveredSecretIds.includes('breakout-sword-extracted');
           consider({
@@ -5796,7 +5863,7 @@ export function Origin70sIsland({
               </div>
               <p className="font-mono text-xs font-bold leading-relaxed text-[#fff5dc] sm:text-sm">
                 {volcanicGuardDialog === 'choice'
-                  ? '¡CUIDADO! ESTA ES ZONA PELIGROSA. ¡ACABAN DE INVADIR ESTA ZONA! ¿ESTÁS SEGURO DE QUE QUIERES SEGUIR?'
+                  ? '¡TEN CUIDADO, ES ZONA PELIGROSA! SOLO LOS VALIENTES CRUZAN A ESTA ZONA. ¿ESTÁS PREPARADO?'
                   : volcanicGuardDialog === 'no'
                   ? '¡ESTO ES PARA VALIENTES!'
                   : '¡QUÉ CRACK! ME SORPRENDE TU VALENTÍA. ¡BUENA SUERTE!'}
@@ -5888,56 +5955,130 @@ export function Origin70sIsland({
       )}
 
       {/* HUD Dock for Active Powers [1-4] */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-20 glass-panel px-3 py-1.5 rounded-xl border border-[#00f3ff]/40 flex items-center gap-2 text-xs font-mono">
-          <span className="text-[10px] text-[#fde047] font-bold mr-1 hidden sm:inline">PODERES:</span>
-        <button
-          type="button"
-          onClick={() => { setActivePower('pong-hoverboard'); executeActivePower('pong-hoverboard'); }}
-          disabled={!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked)}
-          className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-            activePower === 'pong-hoverboard' ? 'bg-[#facc15] text-black shadow-[0_0_10px_#facc15]' : 'bg-slate-800 text-slate-300 hover:text-white'
-          }`}
-        >
-          [1] Paleta {!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? '· BLOQ' : flightFuelUi <= 0 && !allUnlocked ? '· SIN COMBUSTIBLE' : vehicleFlightRef.current.type === 'hoverboard' ? `· ${flightFuelUi}%` : `· ${flightFuelUi}% LISTA`}
-        </button>
-        <button
-          type="button"
-          onClick={() => { setActivePower('shifting-blade'); executeActivePower('shifting-blade'); }}
-          disabled={!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked)}
-          className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-            activePower === 'shifting-blade' ? 'bg-[#f97316] text-white shadow-[0_0_10px_#f97316]' : 'bg-slate-800 text-slate-300 hover:text-white'
-          }`}
-        >
-          [2] Espada ({bladeMode === 'short' ? 'Corta' : bladeMode === 'extended' ? 'Larga' : 'Pistola'}) {!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked) ? '· BLOQ' : ''}
-        </button>
-        <button type="button" disabled={!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked)} onClick={() => setBladeMode((mode) => mode === 'short' ? 'extended' : mode === 'extended' ? 'gun' : 'short')} className="px-1 py-1 rounded-md text-[10px] text-slate-200 bg-slate-900 hover:bg-slate-700 disabled:opacity-40" title="Cambiar modo de arma">[C] MODO</button>
-        <button
-          type="button"
-          onClick={() => { setActivePower('orbital-dash'); executeActivePower('orbital-dash'); }}
-          disabled={!isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked)}
-          className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-            activePower === 'orbital-dash' ? 'bg-[#00f3ff] text-black shadow-[0_0_10px_#00f3ff]' : 'bg-slate-800 text-slate-300 hover:text-white'
-          }`}
-        >
-          [3] Dash {!isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked) ? '· BLOQ' : dashCooldown > 0 ? `· ${dashCooldown.toFixed(1)}s` : '· LISTO'}
-        </button>
-        <button
-          type="button"
-          onClick={() => { setActivePower('sonar-pulse'); executeActivePower('sonar-pulse'); }}
-          disabled={!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked)}
-          className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-            activePower === 'sonar-pulse' ? 'bg-[#10b981] text-black shadow-[0_0_10px_#10b981]' : 'bg-slate-800 text-slate-300 hover:text-white'
-          }`}
-        >
-          [4] Sonar {!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked) ? '· BLOQ' : sonarActive ? '· ACTIVO' : '· LISTO'}
-        </button>
-        <button
-          type="button"
-          onClick={() => executeActivePower()}
-          className="btn-ui px-3 py-1 rounded-md text-[11px] font-bold text-[#fde047] cursor-pointer ml-1"
-        >
-          ⚡ [F] Ejecutar
-        </button>
+      <div className="pv-powerdock fixed top-3 left-1/2 -translate-x-1/2 z-20 font-mono" role="toolbar" aria-label="Poderes activos">
+        <style>{POWER_DOCK_CSS}</style>
+        <div className="pv-powerdock__frame">
+          <div className="pv-powerdock__label" aria-hidden="true">
+            <span className="pv-powerdock__labelTop">
+              <span className="pv-powerdock__gem" />
+              <span className="pv-powerdock__labelText">Poderes</span>
+            </span>
+            <span className="pv-powerdock__labelSub">ARCHIVO 70s</span>
+          </div>
+          <div className="pv-powerdock__slots">
+            <button
+              type="button"
+              title="Paleta de Pong · Vuelo y planeo"
+              aria-pressed={activePower === 'pong-hoverboard'}
+              onClick={() => { setActivePower('pong-hoverboard'); executeActivePower('pong-hoverboard'); }}
+              disabled={!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked)}
+              className={`pv-slot ${activePower === 'pong-hoverboard' && isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? 'is-locked' : ''}`}
+              style={{ '--slot': '#facc15' } as React.CSSProperties}
+            >
+              <span className="pv-slot__key" aria-hidden="true">1</span>
+              <span className="pv-slot__body">
+                <span className="pv-slot__name">Paleta</span>
+                <span className="pv-slot__status">
+                  {!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked)
+                    ? 'SELLADA'
+                    : flightFuelUi <= 0 && !allUnlocked
+                    ? 'SIN COMBUSTIBLE'
+                    : vehicleFlightRef.current.type === 'hoverboard'
+                    ? `${flightFuelUi}% · EN VUELO`
+                    : `${flightFuelUi}% · LISTA`}
+                </span>
+              </span>
+              <span className="pv-slot__meter" aria-hidden="true">
+                <span className="pv-slot__meterFill" style={{ width: `${Math.max(0, Math.min(100, flightFuelUi))}%` }} />
+              </span>
+            </button>
+            <button
+              type="button"
+              title="Espada Cambiante · Cambia de forma con [C]"
+              aria-pressed={activePower === 'shifting-blade'}
+              onClick={() => { setActivePower('shifting-blade'); executeActivePower('shifting-blade'); }}
+              disabled={!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked)}
+              className={`pv-slot ${activePower === 'shifting-blade' && isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked) ? 'is-locked' : ''}`}
+              style={{ '--slot': '#fb923c' } as React.CSSProperties}
+            >
+              <span className="pv-slot__key" aria-hidden="true">2</span>
+              <span className="pv-slot__body">
+                <span className="pv-slot__name">Espada</span>
+                <span className="pv-slot__status">
+                  {!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked)
+                    ? 'SELLADA'
+                    : `MODO · ${bladeMode === 'short' ? 'CORTA' : bladeMode === 'extended' ? 'LARGA' : 'PISTOLA'}`}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              title="Dash Orbital · Impulso rápido"
+              aria-pressed={activePower === 'orbital-dash'}
+              onClick={() => { setActivePower('orbital-dash'); executeActivePower('orbital-dash'); }}
+              disabled={!isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked)}
+              className={`pv-slot ${activePower === 'orbital-dash' && isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked) ? 'is-locked' : ''}`}
+              style={{ '--slot': '#38e8ff' } as React.CSSProperties}
+            >
+              <span className="pv-slot__key" aria-hidden="true">3</span>
+              <span className="pv-slot__body">
+                <span className="pv-slot__name">Dash</span>
+                <span className="pv-slot__status">
+                  {!isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked)
+                    ? 'SELLADA'
+                    : dashCooldown > 0
+                    ? `RECARGA · ${dashCooldown.toFixed(1)}s`
+                    : 'LISTO'}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              title="Pulso Sonar · Revela secretos cercanos"
+              aria-pressed={activePower === 'sonar-pulse'}
+              onClick={() => { setActivePower('sonar-pulse'); executeActivePower('sonar-pulse'); }}
+              disabled={!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked)}
+              className={`pv-slot ${activePower === 'sonar-pulse' && isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked) ? 'is-locked' : ''}`}
+              style={{ '--slot': '#34d399' } as React.CSSProperties}
+            >
+              <span className="pv-slot__key" aria-hidden="true">4</span>
+              <span className="pv-slot__body">
+                <span className="pv-slot__name">Sonar</span>
+                <span className="pv-slot__status">
+                  {!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked)
+                    ? 'SELLADA'
+                    : sonarActive
+                    ? 'ACTIVO'
+                    : 'LISTO'}
+                </span>
+              </span>
+            </button>
+          </div>
+          <div className="pv-powerdock__side">
+            <button
+              type="button"
+              disabled={!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked)}
+              onClick={() => setBladeMode((mode) => mode === 'short' ? 'extended' : mode === 'extended' ? 'gun' : 'short')}
+              className="pv-modekey"
+              title="Cambiar modo de arma"
+            >
+              <span className="pv-modekey__key" aria-hidden="true">C</span>
+              <span className="pv-modekey__body">
+                <span className="pv-modekey__label">MODO</span>
+                <span className="pv-modekey__sub">
+                  {bladeMode === 'short' ? 'CORTA' : bladeMode === 'extended' ? 'LARGA' : 'PISTOLA'}
+                </span>
+              </span>
+            </button>
+            <button type="button" onClick={() => executeActivePower()} className="pv-exec" title="Ejecutar el poder activo">
+              <span className="pv-exec__key" aria-hidden="true">F</span>
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M13 2 4.5 13.2c-.4.5 0 1.3.7 1.3H10l-1 7.4c-.1.9 1 1.4 1.6.7L20 11.3c.5-.6.1-1.5-.7-1.5H14l1-7.1c.1-.9-1.1-1.4-1.7-.7Z" />
+              </svg>
+              <span>Ejecutar</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Legacy Power Selection Modal */}

@@ -3281,7 +3281,6 @@ function drawHandcraftedPathsAndStairs(
   const stairConnectors = [
     { x: 576, y: 1528, w: 112, steps: 5, isBastionMain: false },
     { x: 1760, y: 960, w: 256, steps: 7, isBastionMain: true },
-    { x: 2548, y: 368, w: 120, steps: 5, isBastionMain: false },
   ];
 
   for (const st of stairConnectors) {

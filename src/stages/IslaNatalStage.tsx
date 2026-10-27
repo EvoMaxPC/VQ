@@ -25,6 +25,7 @@ import {
   ARCADE_DIALOG_SPENT,
   DEPARTURE_BLOCKED_DIALOG,
   ISLA_NATAL_ARCADE_ANCHOR,
+  ISLA_NATAL_CABIN,
   ISLA_NATAL_DEPARTURE,
   ISLA_NATAL_FLAGS,
   ISLA_NATAL_NORTH_PORT_SPAWN,
@@ -35,13 +36,14 @@ import {
   ISLA_NATAL_WORLD_W,
   ISLA_NATAL_ZONES,
   PADDLE_DIALOG,
+  isCabinInteriorWalkable,
   isIslaNatalBoxWalkable,
-  isIslaNatalPointWalkable,
   islaNatalZoneAt,
   type IslaNatalDialog,
   type IslaNatalZoneId,
 } from '../island/islaNatalData';
 import {
+  renderIslaNatalCabin,
   renderIslaNatalFrame,
   type ArcadeCabinetState,
   type IslaNatalParticle,
@@ -83,9 +85,31 @@ const ARRIVAL_DIALOG: IslaNatalDialog = {
   hint: 'WASD o flechas para caminar · Mayús para correr · E para examinar',
 };
 
+const CABIN_INTRO_DIALOG: IslaNatalDialog = {
+  title: 'La casa de la pradera',
+  subtitle: 'Interior · Cabaña familiar',
+  paragraphs: [
+    'La puerta se cierra a tu espalda y el ruido del mar queda afuera. Adentro huele a leña, a pan de ayer y a la lámpara de aceite que nadie apagó.',
+    'La cama está hecha, la mesa puesta para dos y la cocina todavía tibia. Nada ha cambiado desde la última vez que jugaste aquí.',
+    'Junto a la ventana, colgada de un clavo, sigue tu vieja mochila de lona.',
+  ],
+  hint: 'Acércate a la mochila y pulsa [E] para llevártela. La puerta de abajo te devuelve a la pradera.',
+};
+
+const CABIN_BACKPACK_DIALOG: IslaNatalDialog = {
+  title: 'La mochila de lona',
+  subtitle: 'Equipo por defecto',
+  paragraphs: [
+    'La lona está curtida por la sal y conserva el olor de todos los veranos. Pesada, sí; vacía, no.',
+    'Adentro espera el equipo de siempre: la Bitácora de la Isla del Origen, una cantimplora de hojalata, una brújula de latón y un ovillo de cuerda.',
+    'Te la cuelgas al hombro. Ahora lo que encuentres en el camino tendrá un lugar donde viajar contigo.',
+  ],
+  hint: 'La mochila queda en tu inventario: ábrelo con [ENTER] en la Isla del Origen.',
+};
+
 const NATAL_FLAGS = ISLA_NATAL_FLAGS;
 
-type NatalPromptKind = 'poi' | 'arcade' | 'paddle' | 'departure';
+type NatalPromptKind = 'poi' | 'arcade' | 'paddle' | 'departure' | 'cabin-exit' | 'cabin-backpack';
 
 interface NatalPromptTarget {
   kind: NatalPromptKind;
@@ -143,6 +167,8 @@ export interface IslaNatalStageProps {
   narrativeEvents: string[];
   onRecordNarrativeEvent: (eventId: string) => void;
   onDepartToOrigin: () => void;
+  /** Entrega el equipo inicial de la mochila al inventario persistente. */
+  onGrantInventoryItems: (itemIds: string[]) => void;
 }
 
 export function IslaNatalStage({
@@ -153,6 +179,7 @@ export function IslaNatalStage({
   narrativeEvents,
   onRecordNarrativeEvent,
   onDepartToOrigin,
+  onGrantInventoryItems,
 }: IslaNatalStageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [keybindings] = useState<KeybindingsMap>(() => loadKeybindings());
@@ -295,6 +322,17 @@ export function IslaNatalStage({
   const renderFaultRef = useRef(0);
   const [renderFault, setRenderFault] = useState(false);
   const interactRef = useRef<(target: NatalPromptTarget) => void>(() => {});
+  /** Permite descartar el destino de clic al cambiar de escena. */
+  const clickResetRef = useRef<() => void>(() => {});
+  /** Estado del interior de la cabaña y posición a la que se vuelve al salir. */
+  const cabinRef = useRef({
+    inside: false,
+    savedX: 0,
+    savedY: 0,
+    savedFacing: 'down' as FacingDirection,
+  });
+  const grantInventoryRef = useRef(onGrantInventoryItems);
+  grantInventoryRef.current = onGrantInventoryItems;
 
   const stageRef = useRef({
     flagSet,
@@ -489,8 +527,80 @@ export function IslaNatalStage({
     startDeparture();
   }, [startDeparture]);
 
+  const enterCabin = useCallback(() => {
+    const cabin = cabinRef.current;
+    if (cabin.inside) return;
+    const player = playerRef.current;
+    cabin.savedX = player.x;
+    cabin.savedY = player.y;
+    cabin.savedFacing = player.facingDir;
+    cabin.inside = true;
+    player.x = ISLA_NATAL_CABIN.spawn.x;
+    player.y = ISLA_NATAL_CABIN.spawn.y;
+    player.facingDir = 'up';
+    player.walking = false;
+    player.sprinting = false;
+    clickResetRef.current();
+    retroAudio.doorTransition();
+    if (!stageRef.current.flagSet.has(NATAL_FLAGS.cabinVisited)) {
+      markFlag(NATAL_FLAGS.cabinVisited);
+      setDialogModal({
+        category: 'PRADERA DE CASA · INTERIOR',
+        tone: 'wood',
+        dialog: CABIN_INTRO_DIALOG,
+      });
+    } else {
+      showToast('La casa sigue tibia: tu mochila espera junto a la ventana.');
+    }
+  }, [markFlag, showToast]);
+
+  const leaveCabin = useCallback(() => {
+    const cabin = cabinRef.current;
+    if (!cabin.inside) return;
+    cabin.inside = false;
+    const player = playerRef.current;
+    player.x = cabin.savedX;
+    player.y = cabin.savedY;
+    player.facingDir = 'right';
+    player.walking = false;
+    player.sprinting = false;
+    retroAudio.doorTransition();
+  }, []);
+
+  const takeCabinBackpack = useCallback(() => {
+    if (stageRef.current.flagSet.has(NATAL_FLAGS.backpack)) return;
+    setDialogModal({
+      category: 'PRADERA DE CASA · LA MOCHILA',
+      tone: 'wood',
+      dialog: CABIN_BACKPACK_DIALOG,
+      primary: {
+        label: 'Llevar la mochila',
+        run: () => {
+          markFlag(NATAL_FLAGS.backpack);
+          grantInventoryRef.current(['item-mochila-explorador', 'item-bitacora-cero']);
+          emitParticles(
+            particlesRef.current,
+            ISLA_NATAL_CABIN.backpack.x,
+            ISLA_NATAL_CABIN.backpack.y + 12,
+            44,
+            '#f5d9a0',
+            54,
+            18
+          );
+          retroAudio.achievementUnlock();
+          setDialogModal(null);
+          showToast('Mochila al hombro · Bitácora, cantimplora, brújula y cuerda.');
+        },
+      },
+    });
+  }, [markFlag, showToast]);
+
   const interactPoi = useCallback(
     (poiId: string) => {
+      if (poiId === 'puerta-cabana') {
+        enterCabin();
+        return;
+      }
       const poi = ISLA_NATAL_POIS.find((entry) => entry.id === poiId);
       if (!poi) return;
       retroAudio.npcBlip(poi.kind.startsWith('viewpoint') ? 0.85 : 1.05);
@@ -502,7 +612,7 @@ export function IslaNatalStage({
         dialog: poi.dialog,
       });
     },
-    []
+    [enterCabin]
   );
 
   const handleInteract = useCallback(
@@ -510,9 +620,18 @@ export function IslaNatalStage({
       if (target.kind === 'poi') interactPoi(target.id);
       else if (target.kind === 'arcade') interactArcade();
       else if (target.kind === 'paddle') interactPaddle();
+      else if (target.kind === 'cabin-backpack') takeCabinBackpack();
+      else if (target.kind === 'cabin-exit') leaveCabin();
       else interactDeparture();
     },
-    [interactArcade, interactDeparture, interactPaddle, interactPoi]
+    [
+      interactArcade,
+      interactDeparture,
+      interactPaddle,
+      interactPoi,
+      leaveCabin,
+      takeCabinBackpack,
+    ]
   );
   interactRef.current = handleInteract;
 
@@ -587,8 +706,11 @@ export function IslaNatalStage({
     let vw = window.innerWidth;
     let vh = window.innerHeight;
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const viewW = () => vw / CAMERA_ZOOM;
-    const viewH = () => vh / CAMERA_ZOOM;
+    // El interior usa la misma escala que la isla para conservar la proporción
+    // del personaje y del pixel-art; la sala queda centrada sobre fondo oscuro.
+    const sceneZoom = () => CAMERA_ZOOM;
+    const viewW = () => vw / sceneZoom();
+    const viewH = () => vh / sceneZoom();
     const resize = () => {
       vw = window.innerWidth;
       vh = window.innerHeight;
@@ -608,6 +730,18 @@ export function IslaNatalStage({
     const cameraTarget = () => {
       const w = viewW();
       const h = viewH();
+      if (cabinRef.current.inside) {
+        return {
+          x:
+            w >= ISLA_NATAL_CABIN.roomW
+              ? (ISLA_NATAL_CABIN.roomW - w) * 0.5
+              : Math.max(0, Math.min(ISLA_NATAL_CABIN.roomW - w, player.x - w * 0.5)),
+          y:
+            h >= ISLA_NATAL_CABIN.roomH
+              ? (ISLA_NATAL_CABIN.roomH - h) * 0.5
+              : Math.max(0, Math.min(ISLA_NATAL_CABIN.roomH - h, player.y - h * 0.5)),
+        };
+      }
       return {
         x:
           w >= ISLA_NATAL_WORLD_W
@@ -625,6 +759,11 @@ export function IslaNatalStage({
 
     const keys: Record<string, boolean> = {};
     let clickTarget: { x: number; y: number } | null = null;
+    clickResetRef.current = () => {
+      clickTarget = null;
+    };
+    const canWalkAt = (px: number, py: number) =>
+      cabinRef.current.inside ? isCabinInteriorWalkable(px, py) : isIslaNatalBoxWalkable(px, py);
     let stepAudioTimer = 0;
     let walkTimer = 0;
     let prevZoneId: IslaNatalZoneId | null = null;
@@ -693,9 +832,10 @@ export function IslaNatalStage({
     const onPointerDown = (event: PointerEvent) => {
       if (stageRef.current.dialogOpen || stageRef.current.challengeOpen) return;
       const rect = canvas.getBoundingClientRect();
-      const worldX = (event.clientX - rect.left) / CAMERA_ZOOM + camera.x;
-      const worldY = (event.clientY - rect.top) / CAMERA_ZOOM + camera.y;
-      clickTarget = isIslaNatalPointWalkable(worldX, worldY) ? { x: worldX, y: worldY } : null;
+      const zoom = sceneZoom();
+      const worldX = (event.clientX - rect.left) / zoom + camera.x;
+      const worldY = (event.clientY - rect.top) / zoom + camera.y;
+      clickTarget = canWalkAt(worldX, worldY) ? { x: worldX, y: worldY } : null;
     };
 
     const onBlur = () => {
@@ -736,6 +876,7 @@ export function IslaNatalStage({
     let raf = 0;
     let last = performance.now();
     let elapsed = 0;
+    let wasInCabin = false;
 
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
@@ -922,9 +1063,9 @@ export function IslaNatalStage({
           const distance = speed * dt;
           const nextX = player.x + dx * distance;
           const nextY = player.y + dy * distance;
-          const canXY = isIslaNatalBoxWalkable(nextX, nextY);
-          const canX = canXY || isIslaNatalBoxWalkable(nextX, player.y);
-          const canY = canXY || isIslaNatalBoxWalkable(player.x, nextY);
+          const canXY = canWalkAt(nextX, nextY);
+          const canX = canXY || canWalkAt(nextX, player.y);
+          const canY = canXY || canWalkAt(player.x, nextY);
 
           if (canXY) {
             player.x = nextX;
@@ -943,17 +1084,29 @@ export function IslaNatalStage({
       }
 
       // Cámara con seguimiento suave (la partida en tabla ya mueve la cámara)
+      const inCabin = cabinRef.current.inside;
       if (!departure) {
         const target = cameraTarget();
-        const follow = Math.min(1, dt * 6.5);
-        camera.x += (target.x - camera.x) * follow;
-        camera.y += (target.y - camera.y) * follow;
+        if (inCabin !== wasInCabin) {
+          // Al cruzar la puerta la cámara salta al interior (o al porche) sin
+          // arrastrarse por todo el mapa.
+          wasInCabin = inCabin;
+          camera.x = target.x;
+          camera.y = target.y;
+          prevZoneId = null;
+        } else {
+          const follow = Math.min(1, dt * 6.5);
+          camera.x += (target.x - camera.x) * follow;
+          camera.y += (target.y - camera.y) * follow;
+        }
 
-        // Zona actual
-        const zoneId = islaNatalZoneAt(player.x, player.y);
-        if (zoneId !== prevZoneId) {
-          stage.showZoneBanner(zoneId, prevZoneId === null);
-          prevZoneId = zoneId;
+        // Zona actual (sólo al aire libre)
+        if (!inCabin) {
+          const zoneId = islaNatalZoneAt(player.x, player.y);
+          if (zoneId !== prevZoneId) {
+            stage.showZoneBanner(zoneId, prevZoneId === null);
+            prevZoneId = zoneId;
+          }
         }
       }
 
@@ -1009,27 +1162,54 @@ export function IslaNatalStage({
       };
 
       if (!departure) {
-        for (const poi of ISLA_NATAL_POIS) {
+        if (inCabin) {
           consider(
             {
-              kind: 'poi',
-              id: poi.id,
-              label: poi.label,
-              accentHex: poi.accentHex,
-              x: poi.x,
-              y: poi.y,
+              kind: 'cabin-exit',
+              id: 'cabin-exit',
+              label: 'Salir al porche',
+              accentHex: '#fdba74',
+              x: ISLA_NATAL_CABIN.door.x,
+              y: ISLA_NATAL_CABIN.door.y,
             },
-            poi.radius
+            ISLA_NATAL_CABIN.door.radius
           );
+          if (!stage.flagSet.has(NATAL_FLAGS.backpack)) {
+            consider(
+              {
+                kind: 'cabin-backpack',
+                id: 'cabin-backpack',
+                label: 'Recoger la mochila',
+                accentHex: '#f5d9a0',
+                x: ISLA_NATAL_CABIN.backpack.x,
+                y: ISLA_NATAL_CABIN.backpack.y,
+              },
+              ISLA_NATAL_CABIN.backpack.radius
+            );
+          }
+        } else {
+          for (const poi of ISLA_NATAL_POIS) {
+            consider(
+              {
+                kind: 'poi',
+                id: poi.id,
+                label: poi.label,
+                accentHex: poi.accentHex,
+                x: poi.x,
+                y: poi.y,
+              },
+              poi.radius
+            );
+          }
+          consider(arcadeTarget, ISLA_NATAL_ARCADE_ANCHOR.radius);
+          if (stage.paddleOnGround) consider(paddleTarget, ISLA_NATAL_PADDLE_ANCHOR.radius);
+          // Puerto Norte: con la Barra de Pong disponible, la opción de surfear
+          // aparece de forma explícita. Sin la barra, sólo se puede asomarse.
+          departureTarget.label = stage.departureReady
+            ? 'Surfear hacia Isla Origen'
+            : 'Asomarse al puerto norte';
+          consider(departureTarget, ISLA_NATAL_DEPARTURE.radius);
         }
-        consider(arcadeTarget, ISLA_NATAL_ARCADE_ANCHOR.radius);
-        if (stage.paddleOnGround) consider(paddleTarget, ISLA_NATAL_PADDLE_ANCHOR.radius);
-        // Puerto Norte: con la Barra de Pong disponible, la opción de surfear
-        // aparece de forma explícita. Sin la barra, sólo se puede asomarse.
-        departureTarget.label = stage.departureReady
-          ? 'Surfear hacia Isla Origen'
-          : 'Asomarse al puerto norte';
-        consider(departureTarget, ISLA_NATAL_DEPARTURE.radius);
       }
       const best = pick.target;
       promptRef.current = best;
@@ -1045,38 +1225,58 @@ export function IslaNatalStage({
       }
 
       try {
+        const zoom = sceneZoom();
+        const playerRender = {
+          x: player.x,
+          y: player.y,
+          facingDir: player.facingDir,
+          walking: player.walking,
+          sprinting: player.sprinting,
+          interactAnim: player.interactAnim,
+          ridingPaddle: player.ridingPaddle,
+          rideTilt: player.rideTilt,
+        };
         ctx.save();
-        ctx.setTransform(dpr * CAMERA_ZOOM, 0, 0, dpr * CAMERA_ZOOM, 0, 0);
-        renderIslaNatalFrame({
-          ctx,
-          vw: viewW(),
-          vh: viewH(),
-          camera,
-          elapsed,
-          reducedMotion,
-          player: {
-            x: player.x,
-            y: player.y,
-            facingDir: player.facingDir,
-            walking: player.walking,
-            sprinting: player.sprinting,
-            interactAnim: player.interactAnim,
-            ridingPaddle: player.ridingPaddle,
-            rideTilt: player.rideTilt,
-          },
-          skinColor: stage.skinColor,
-          hairColor: stage.hairColor,
-          shirtColor: stage.shirtColor,
-          appearance: stage.appearance,
-          arcadeState: stage.arcadeState,
-          charge: chargeRef.current,
-          signalPulse: signalRef.current,
-          paddleOnGround: stage.paddleOnGround,
-          departureReady: stage.departureReady,
-          particles,
-          prompt: promptSpec,
-          shockwaves: waves,
-        });
+        ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, 0, 0);
+        if (cabinRef.current.inside) {
+          renderIslaNatalCabin({
+            ctx,
+            vw: viewW(),
+            vh: viewH(),
+            camera,
+            elapsed,
+            reducedMotion,
+            player: playerRender,
+            skinColor: stage.skinColor,
+            hairColor: stage.hairColor,
+            shirtColor: stage.shirtColor,
+            appearance: stage.appearance,
+            prompt: promptSpec,
+            backpackOnHook: !stage.flagSet.has(NATAL_FLAGS.backpack),
+          });
+        } else {
+          renderIslaNatalFrame({
+            ctx,
+            vw: viewW(),
+            vh: viewH(),
+            camera,
+            elapsed,
+            reducedMotion,
+            player: playerRender,
+            skinColor: stage.skinColor,
+            hairColor: stage.hairColor,
+            shirtColor: stage.shirtColor,
+            appearance: stage.appearance,
+            arcadeState: stage.arcadeState,
+            charge: chargeRef.current,
+            signalPulse: signalRef.current,
+            paddleOnGround: stage.paddleOnGround,
+            departureReady: stage.departureReady,
+            particles,
+            prompt: promptSpec,
+            shockwaves: waves,
+          });
+        }
         ctx.restore();
         renderFaultRef.current = 0;
       } catch (error) {

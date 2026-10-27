@@ -999,7 +999,7 @@ function drawCrtOpening(c: CanvasRenderingContext2D, t: number): void {
   c.fillRect(0, 0, FB_W, FB_H);
 
   const ignite = smoothstep(0.05, 0.75, t);
-  const lineW = lerp(2, 168, smoothstep(0.15, 1.9, t));
+  const lineW = lerp(2, FB_W, smoothstep(0.15, 1.9, t));
   const jitterY = Math.round(Math.sin(t * 37) * 0.8 + Math.sin(t * 91) * 0.4);
 
   // Zumbido del tubo: línea horizontal que vibra en el centro
