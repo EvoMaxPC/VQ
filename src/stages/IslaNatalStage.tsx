@@ -1,0 +1,1284 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * ISLA NATAL — «EL ARCADE QUE ESPERÓ SU MOMENTO»
+ *
+ * Primera zona explorable de PIXELVERSE: una isla pequeña e irregular rodeada de
+ * mar, con su cabaña, su pradera, un alto rocoso, un mirador y un viejo gabinete
+ * de Pong dormido en la arboleda. El encuentro con la máquina enciende la señal
+ * que despierta a la Isla del Origen y entrega la paleta como medio de transporte.
+ *
+ * La progresión se persiste como marcadores narrativos dentro del esquema ya
+ * existente (island70s.narrativeEvents), de modo que nada de lo descubierto aquí
+ * se pierde al caer derrotado ni al recargar la partida.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { AvatarAppearance } from '../avatar/avatarOptions';
+import { retroAudio } from '../audio/retroAudio';
+import { isActionPressed, loadKeybindings, type KeybindingsMap } from '../controls/keybindings';
+import {
+  ARCADE_DIALOG_AFTER_WIN,
+  ARCADE_DIALOG_DUSTY,
+  ARCADE_DIALOG_POWER_ON,
+  ARCADE_DIALOG_SPENT,
+  DEPARTURE_BLOCKED_DIALOG,
+  ISLA_NATAL_ARCADE_ANCHOR,
+  ISLA_NATAL_DEPARTURE,
+  ISLA_NATAL_FLAGS,
+  ISLA_NATAL_NORTH_PORT_SPAWN,
+  ISLA_NATAL_PADDLE_ANCHOR,
+  ISLA_NATAL_POIS,
+  ISLA_NATAL_SPAWN,
+  ISLA_NATAL_WORLD_H,
+  ISLA_NATAL_WORLD_W,
+  ISLA_NATAL_ZONES,
+  PADDLE_DIALOG,
+  isIslaNatalBoxWalkable,
+  isIslaNatalPointWalkable,
+  islaNatalZoneAt,
+  type IslaNatalDialog,
+  type IslaNatalZoneId,
+} from '../island/islaNatalData';
+import {
+  renderIslaNatalFrame,
+  type ArcadeCabinetState,
+  type IslaNatalParticle,
+  type IslaNatalPromptSpec,
+} from '../island/islaNatalRenderer';
+import type { FacingDirection } from '../rpg/rpgContent';
+import { IslaNatalPongChallenge } from './IslaNatalPongChallenge';
+
+const CAMERA_ZOOM = 1.85;
+const WALK_SPEED = 200;
+const SPRINT_SPEED = 300;
+const SIGNAL_DECAY = 0.2;
+const DEPARTURE_DURATION = 4.6;
+
+function cubicLerp(a: number, b: number, c: number, d: number, t: number): number {
+  const inv = 1 - t;
+  return inv * inv * inv * a + 3 * inv * inv * t * b + 3 * inv * t * t * c + t * t * t * d;
+}
+
+interface NatalDepartureRide {
+  t: number;
+  duration: number;
+  from: { x: number; y: number };
+  c1: { x: number; y: number };
+  c2: { x: number; y: number };
+  to: { x: number; y: number };
+  nextSpray: number;
+  nextRing: number;
+}
+
+const ARRIVAL_DIALOG: IslaNatalDialog = {
+  title: 'La isla donde naciste',
+  subtitle: 'Playa del Aurora',
+  paragraphs: [
+    'Abres los ojos sobre arena tibia. El mar respira despacio, como si también acabara de despertar.',
+    'No recuerdas cómo has llegado hasta aquí, pero tus pies sí: conocen cada piedra del sendero que sube hacia la cabaña.',
+    'Al otro lado de la pradera, entre los árboles, algo lanza un destello cian muy débil y vuelve a callarse.',
+  ],
+  hint: 'WASD o flechas para caminar · Mayús para correr · E para examinar',
+};
+
+const NATAL_FLAGS = ISLA_NATAL_FLAGS;
+
+type NatalPromptKind = 'poi' | 'arcade' | 'paddle' | 'departure';
+
+interface NatalPromptTarget {
+  kind: NatalPromptKind;
+  id: string;
+  label: string;
+  accentHex: string;
+  x: number;
+  y: number;
+}
+
+interface NatalDialogAction {
+  label: string;
+  run: () => void;
+}
+
+interface NatalDialogModal {
+  category: string;
+  tone: 'wood' | 'stone' | 'arcane';
+  dialog: IslaNatalDialog;
+  primary?: NatalDialogAction;
+}
+
+function emitParticles(
+  list: IslaNatalParticle[],
+  x: number,
+  y: number,
+  count: number,
+  color: string,
+  spread = 58,
+  lift = 22
+): void {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 10 + Math.random() * spread;
+    const life = 0.7 + Math.random() * 1.1;
+    list.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed * 0.6 - lift,
+      life,
+      maxLife: life,
+      color,
+      size: Math.random() < 0.45 ? 3 : 2,
+    });
+  }
+  if (list.length > 460) list.splice(0, list.length - 460);
+}
+
+export interface IslaNatalStageProps {
+  skinColor: string;
+  hairColor: string;
+  shirtColor: string;
+  appearance: AvatarAppearance;
+  narrativeEvents: string[];
+  onRecordNarrativeEvent: (eventId: string) => void;
+  onDepartToOrigin: () => void;
+}
+
+export function IslaNatalStage({
+  skinColor,
+  hairColor,
+  shirtColor,
+  appearance,
+  narrativeEvents,
+  onRecordNarrativeEvent,
+  onDepartToOrigin,
+}: IslaNatalStageProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [keybindings] = useState<KeybindingsMap>(() => loadKeybindings());
+
+  /* -------------------------------------------------------------- */
+  /* MARCADORES NARRATIVOS                                           */
+  /* -------------------------------------------------------------- */
+
+  const [localFlags, setLocalFlags] = useState<string[]>([]);
+  const flagSet = useMemo(
+    () => new Set([...narrativeEvents, ...localFlags]),
+    [narrativeEvents, localFlags]
+  );
+
+  const onRecordRef = useRef(onRecordNarrativeEvent);
+  onRecordRef.current = onRecordNarrativeEvent;
+
+  const markFlag = useCallback((id: string) => {
+    setLocalFlags((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    onRecordRef.current(id);
+  }, []);
+
+  const arcadePowered = flagSet.has(NATAL_FLAGS.arcadePowered);
+  const pongWon = flagSet.has(NATAL_FLAGS.pongWon);
+  const paddleCarried = flagSet.has(NATAL_FLAGS.paddle);
+  const arcadeState: ArcadeCabinetState = pongWon
+    ? 'won'
+    : arcadePowered
+      ? 'powered'
+      : 'dusty';
+  const paddleOnGround = pongWon && !paddleCarried;
+  // El puerto norte sólo abre el carril de surf cuando Pong está ganado y la
+  // Barra de Pong está en manos del jugador.
+  const departureReady = pongWon && paddleCarried;
+  const startAtNorthPort = pongWon && paddleCarried;
+
+  /* -------------------------------------------------------------- */
+  /* DIÁLOGO                                                         */
+  /* -------------------------------------------------------------- */
+
+  const [dialogModal, setDialogModal] = useState<NatalDialogModal | null>(null);
+  const [dialogueVisibleChars, setDialogueVisibleChars] = useState(0);
+  const dialogueFullText = dialogModal?.dialog.paragraphs.join('\n\n') ?? '';
+
+  useEffect(() => {
+    if (!dialogModal) {
+      setDialogueVisibleChars(0);
+      return;
+    }
+    setDialogueVisibleChars(0);
+    let shown = 0;
+    const timer = window.setInterval(() => {
+      shown = Math.min(dialogueFullText.length, shown + 3);
+      setDialogueVisibleChars(shown);
+      if (shown >= dialogueFullText.length) window.clearInterval(timer);
+    }, 18);
+    return () => window.clearInterval(timer);
+  }, [dialogModal, dialogueFullText]);
+
+  const advanceDialogueRef = useRef<() => void>(() => {});
+  advanceDialogueRef.current = () => {
+    if (!dialogModal) return;
+    if (dialogueVisibleChars < dialogueFullText.length) {
+      setDialogueVisibleChars(dialogueFullText.length);
+      retroAudio.tick();
+      return;
+    }
+    if (dialogModal.primary) dialogModal.primary.run();
+    else {
+      setDialogModal(null);
+      retroAudio.uiClick();
+    }
+  };
+
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 4200);
+  }, []);
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    },
+    []
+  );
+
+  /* -------------------------------------------------------------- */
+  /* RETO DE PONG Y PARTIDA                                          */
+  /* -------------------------------------------------------------- */
+
+  const [challengeOpen, setChallengeOpen] = useState(false);
+  const [departureFlash, setDepartureFlash] = useState(false);
+  const [zoneBanner, setZoneBanner] = useState<{
+    name: string;
+    subtitle: string;
+    accentHex: string;
+  } | null>(null);
+  const zoneTimerRef = useRef<number | null>(null);
+
+  const showZoneBanner = useCallback((zoneId: IslaNatalZoneId, first: boolean) => {
+    const zone = ISLA_NATAL_ZONES[zoneId];
+    setZoneBanner({ name: zone.name, subtitle: zone.subtitle, accentHex: zone.accentHex });
+    if (!first) retroAudio.zoneChime();
+    if (zoneTimerRef.current !== null) window.clearTimeout(zoneTimerRef.current);
+    zoneTimerRef.current = window.setTimeout(() => setZoneBanner(null), 2900);
+  }, []);
+  useEffect(
+    () => () => {
+      if (zoneTimerRef.current !== null) window.clearTimeout(zoneTimerRef.current);
+    },
+    []
+  );
+
+  /* -------------------------------------------------------------- */
+  /* RUNTIME COMPARTIDO CON EL BUCLE                                 */
+  /* -------------------------------------------------------------- */
+
+  const playerRef = useRef({
+    // Al volver de Pong, el jugador aparece junto al puerto norte con la barra
+    // lista: la salida queda a la vista en lugar de perderse en la playa sur.
+    x: (startAtNorthPort ? ISLA_NATAL_NORTH_PORT_SPAWN : ISLA_NATAL_SPAWN).x,
+    y: (startAtNorthPort ? ISLA_NATAL_NORTH_PORT_SPAWN : ISLA_NATAL_SPAWN).y,
+    facingDir: 'up' as FacingDirection,
+    walking: false,
+    sprinting: false,
+    interactAnim: 0,
+    ridingPaddle: false,
+    rideTilt: 0,
+  });
+  const particlesRef = useRef<IslaNatalParticle[]>([]);
+  const shockwavesRef = useRef<{ x: number; y: number; t: number; life: number }[]>([]);
+  const chargeRef = useRef(0);
+  const signalRef = useRef(0);
+  const promptRef = useRef<NatalPromptTarget | null>(null);
+  const departureRef = useRef<NatalDepartureRide | null>(null);
+  const departureSafetyRef = useRef<number | null>(null);
+  const portCooldownRef = useRef(0);
+  const renderFaultRef = useRef(0);
+  const [renderFault, setRenderFault] = useState(false);
+  const interactRef = useRef<(target: NatalPromptTarget) => void>(() => {});
+
+  const stageRef = useRef({
+    flagSet,
+    arcadeState,
+    paddleOnGround,
+    departureReady,
+    skinColor,
+    hairColor,
+    shirtColor,
+    appearance,
+    dialogOpen: false,
+    challengeOpen,
+    showZoneBanner,
+    markFlag,
+    onDepartToOrigin,
+    setDepartureFlash,
+  });
+  stageRef.current = {
+    flagSet,
+    arcadeState,
+    paddleOnGround,
+    departureReady,
+    skinColor,
+    hairColor,
+    shirtColor,
+    appearance,
+    dialogOpen: dialogModal !== null,
+    challengeOpen,
+    showZoneBanner,
+    markFlag,
+    onDepartToOrigin,
+    setDepartureFlash,
+  };
+
+  /* -------------------------------------------------------------- */
+  /* ACCIONES                                                        */
+  /* -------------------------------------------------------------- */
+
+  const openChallenge = useCallback(() => {
+    setDialogModal(null);
+    setChallengeOpen(true);
+    retroAudio.doorTransition();
+  }, []);
+
+  const powerOnArcade = useCallback(() => {
+    markFlag(NATAL_FLAGS.arcadePowered);
+    retroAudio.unlock();
+    emitParticles(
+      particlesRef.current,
+      ISLA_NATAL_ARCADE_ANCHOR.x,
+      ISLA_NATAL_ARCADE_ANCHOR.y - 60,
+      42,
+      '#67e8f9'
+    );
+    shockwavesRef.current.push({
+      x: ISLA_NATAL_ARCADE_ANCHOR.x,
+      y: ISLA_NATAL_ARCADE_ANCHOR.y - 40,
+      t: 0,
+      life: 1.6,
+    });
+    chargeRef.current = Math.max(chargeRef.current, 0.2);
+    setDialogModal({
+      category: 'LA ARBOLEDA · TUBO CATÓDICO',
+      tone: 'arcane',
+      dialog: ARCADE_DIALOG_POWER_ON,
+      primary: { label: 'Jugar · 3 goles', run: openChallenge },
+    });
+  }, [markFlag, openChallenge]);
+
+  const interactArcade = useCallback(() => {
+    const flags = stageRef.current.flagSet;
+    if (!flags.has(NATAL_FLAGS.arcadePowered)) {
+      if (!flags.has(NATAL_FLAGS.arcadeFound)) {
+        markFlag(NATAL_FLAGS.arcadeFound);
+        retroAudio.echoDiscover();
+      }
+      setDialogModal({
+        category: 'LA ARBOLEDA · UN REGALO IMPOSIBLE',
+        tone: 'arcane',
+        dialog: ARCADE_DIALOG_DUSTY,
+        primary: { label: 'Encender el gabinete', run: powerOnArcade },
+      });
+      return;
+    }
+    if (!flags.has(NATAL_FLAGS.pongWon)) {
+      setDialogModal({
+        category: 'LA ARBOLEDA · TUBO CATÓDICO',
+        tone: 'arcane',
+        dialog: ARCADE_DIALOG_POWER_ON,
+        primary: { label: 'Jugar · 3 goles', run: openChallenge },
+      });
+      return;
+    }
+    const carried = flags.has(NATAL_FLAGS.paddle);
+    setDialogModal({
+      category: 'LA ARBOLEDA · LA MÁQUINA CUMPLIÓ',
+      tone: 'arcane',
+      dialog: carried ? ARCADE_DIALOG_SPENT : ARCADE_DIALOG_AFTER_WIN,
+    });
+  }, [markFlag, openChallenge, powerOnArcade]);
+
+  const interactPaddle = useCallback(() => {
+    setDialogModal({
+      category: 'LA ARBOLEDA · LA PALETA',
+      tone: 'arcane',
+      dialog: PADDLE_DIALOG,
+      primary: {
+        label: 'Guardarla',
+        run: () => {
+          markFlag(NATAL_FLAGS.paddle);
+          retroAudio.achievementUnlock();
+          emitParticles(
+            particlesRef.current,
+            ISLA_NATAL_PADDLE_ANCHOR.x,
+            ISLA_NATAL_PADDLE_ANCHOR.y - 18,
+            60,
+            '#e0faff',
+            74,
+            34
+          );
+          setDialogModal(null);
+          showToast('La paleta apunta al sur: el mar ha abierto un carril de luz.');
+        },
+      },
+    });
+  }, [markFlag, showToast]);
+
+  const startDeparture = useCallback(() => {
+    if (departureRef.current) return;
+    const player = playerRef.current;
+    const from = { x: player.x, y: player.y };
+    // Travesía real hacia el norte: el puerto abre el carril y la barra surca
+    // el mar abierto hasta la costa de la Isla del Origen.
+    const to = { x: ISLA_NATAL_DEPARTURE.x + 210, y: -420 };
+    departureRef.current = {
+      t: 0,
+      duration: DEPARTURE_DURATION,
+      from,
+      c1: { x: from.x + 240, y: from.y - 110 },
+      c2: { x: to.x - 40, y: to.y + 220 },
+      to,
+      nextSpray: 0,
+      nextRing: 0.25,
+    };
+    player.ridingPaddle = true;
+    player.rideTilt = 0;
+    player.walking = false;
+    player.sprinting = false;
+    player.facingDir = 'right';
+    retroAudio.hoverboardLaunch();
+    window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+
+    // Red de seguridad: si el navegador congela los frames, la partida llega igual.
+    if (departureSafetyRef.current !== null) window.clearTimeout(departureSafetyRef.current);
+    departureSafetyRef.current = window.setTimeout(() => {
+      departureSafetyRef.current = null;
+      if (!departureRef.current) return;
+      departureRef.current = null;
+      const current = playerRef.current;
+      current.ridingPaddle = false;
+      current.rideTilt = 0;
+      try {
+        stageRef.current.markFlag(NATAL_FLAGS.departed);
+        stageRef.current.onDepartToOrigin();
+      } catch (error) {
+        console.error('[PIXELVERSE] La partida en tabla no pudo completarse:', error);
+        current.x = ISLA_NATAL_DEPARTURE.x;
+        current.y = ISLA_NATAL_DEPARTURE.y - 24;
+        portCooldownRef.current = performance.now() + 6000;
+        stageRef.current.setDepartureFlash(false);
+      }
+    }, DEPARTURE_DURATION * 1000 + 1800);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (departureSafetyRef.current !== null) window.clearTimeout(departureSafetyRef.current);
+    },
+    []
+  );
+
+  const interactDeparture = useCallback(() => {
+    if (!stageRef.current.departureReady) {
+      setDialogModal({
+        category: 'PUERTO NORTE · EL CARRIL DE LUZ',
+        tone: 'wood',
+        dialog: DEPARTURE_BLOCKED_DIALOG,
+      });
+      return;
+    }
+    // La travesía se elige aquí y se ejecuta sola hasta la Isla del Origen.
+    startDeparture();
+  }, [startDeparture]);
+
+  const interactPoi = useCallback(
+    (poiId: string) => {
+      const poi = ISLA_NATAL_POIS.find((entry) => entry.id === poiId);
+      if (!poi) return;
+      retroAudio.npcBlip(poi.kind.startsWith('viewpoint') ? 0.85 : 1.05);
+      const arcane =
+        poi.kind === 'window' || poi.kind === 'mailbox' || poi.kind === 'viewpoint-sea';
+      setDialogModal({
+        category: ISLA_NATAL_ZONES[islaNatalZoneAt(poi.x, poi.y)].name.toUpperCase(),
+        tone: arcane ? 'arcane' : 'wood',
+        dialog: poi.dialog,
+      });
+    },
+    []
+  );
+
+  const handleInteract = useCallback(
+    (target: NatalPromptTarget) => {
+      if (target.kind === 'poi') interactPoi(target.id);
+      else if (target.kind === 'arcade') interactArcade();
+      else if (target.kind === 'paddle') interactPaddle();
+      else interactDeparture();
+    },
+    [interactArcade, interactDeparture, interactPaddle, interactPoi]
+  );
+  interactRef.current = handleInteract;
+
+  const handleChallengeVictory = useCallback(
+    (arcadePoints: number, rallies: number) => {
+      setChallengeOpen(false);
+      markFlag(NATAL_FLAGS.pongWon);
+      markFlag(NATAL_FLAGS.signal);
+      signalRef.current = 1;
+      chargeRef.current = 1;
+      const anchor = ISLA_NATAL_ARCADE_ANCHOR;
+      emitParticles(particlesRef.current, anchor.x, anchor.y - 46, 120, '#b9f6ff', 120, 60);
+      emitParticles(particlesRef.current, anchor.x, anchor.y - 46, 60, '#ffffff', 80, 90);
+      shockwavesRef.current.push(
+        { x: anchor.x, y: anchor.y - 30, t: 0, life: 2.4 },
+        { x: anchor.x, y: anchor.y - 30, t: -0.5, life: 2.8 },
+        { x: anchor.x, y: anchor.y - 30, t: -1.1, life: 3.2 }
+      );
+      retroAudio.portalVictory();
+      window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+      showToast(`Victoria · ${arcadePoints} PTS en ${rallies} intercambios`);
+      setDialogModal({
+        category: 'LA ARBOLEDA · SEÑAL ENTRANTE',
+        tone: 'arcane',
+        dialog: ARCADE_DIALOG_AFTER_WIN,
+        primary: { label: 'Salir a la arboleda', run: () => setDialogModal(null) },
+      });
+    },
+    [markFlag, showToast]
+  );
+
+  const handleChallengeQuit = useCallback(() => {
+    setChallengeOpen(false);
+  }, []);
+
+  /* -------------------------------------------------------------- */
+  /* LLEGADA                                                         */
+  /* -------------------------------------------------------------- */
+
+  const arrivalAnnouncedRef = useRef(flagSet.has(NATAL_FLAGS.firstLight));
+  useEffect(() => {
+    if (arrivalAnnouncedRef.current) return;
+    arrivalAnnouncedRef.current = true;
+    const timer = window.setTimeout(() => {
+      markFlag(NATAL_FLAGS.firstLight);
+      setDialogModal({
+        category: 'ISLA NATAL · EL DESPERTAR',
+        tone: 'wood',
+        dialog: ARRIVAL_DIALOG,
+      });
+    }, 850);
+    return () => window.clearTimeout(timer);
+  }, [markFlag]);
+
+  /* -------------------------------------------------------------- */
+  /* BUCLE PRINCIPAL                                                 */
+  /* -------------------------------------------------------------- */
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let reducedMotion = motionQuery.matches;
+    const onMotionChange = (event: MediaQueryListEvent) => {
+      reducedMotion = event.matches;
+    };
+    motionQuery.addEventListener('change', onMotionChange);
+
+    let vw = window.innerWidth;
+    let vh = window.innerHeight;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const viewW = () => vw / CAMERA_ZOOM;
+    const viewH = () => vh / CAMERA_ZOOM;
+    const resize = () => {
+      vw = window.innerWidth;
+      vh = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(vw * dpr);
+      canvas.height = Math.floor(vh * dpr);
+      canvas.style.width = `${vw}px`;
+      canvas.style.height = `${vh}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const player = playerRef.current;
+    const camera = { x: 0, y: 0 };
+    const cameraTarget = () => {
+      const w = viewW();
+      const h = viewH();
+      return {
+        x:
+          w >= ISLA_NATAL_WORLD_W
+            ? (ISLA_NATAL_WORLD_W - w) * 0.5
+            : Math.max(0, Math.min(ISLA_NATAL_WORLD_W - w, player.x - w * 0.5)),
+        y:
+          h >= ISLA_NATAL_WORLD_H
+            ? (ISLA_NATAL_WORLD_H - h) * 0.5
+            : Math.max(0, Math.min(ISLA_NATAL_WORLD_H - h, player.y - h * 0.5)),
+      };
+    };
+    const initial = cameraTarget();
+    camera.x = initial.x;
+    camera.y = initial.y;
+
+    const keys: Record<string, boolean> = {};
+    let clickTarget: { x: number; y: number } | null = null;
+    let stepAudioTimer = 0;
+    let walkTimer = 0;
+    let prevZoneId: IslaNatalZoneId | null = null;
+    let departureFlashFired = false;
+    let departureFinished = false;
+    let boostFired = false;
+    let warpFired = false;
+    let departureFlashTimer: number | null = null;
+
+    const isEditable = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable ||
+        Boolean(target.closest('[contenteditable="true"]')));
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditable(event.target)) return;
+      const stage = stageRef.current;
+      const hasModifier = event.ctrlKey || event.metaKey || event.altKey;
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
+        event.preventDefault();
+      }
+
+      if (stage.challengeOpen || departureRef.current) return;
+
+      if (stage.dialogOpen) {
+        if (
+          isActionPressed(event, 'interact', keybindings) ||
+          isActionPressed(event, 'confirm', keybindings) ||
+          event.code === 'Enter' ||
+          event.code === 'Space'
+        ) {
+          event.preventDefault();
+          if (!event.repeat) advanceDialogueRef.current();
+        } else if (isActionPressed(event, 'cancel', keybindings)) {
+          event.preventDefault();
+          if (!event.repeat) {
+            setDialogModal(null);
+            retroAudio.uiClick();
+          }
+        }
+        return;
+      }
+
+      keys[event.code] = true;
+
+      if (!hasModifier && isActionPressed(event, 'interact', keybindings)) {
+        event.preventDefault();
+        if (event.repeat) return;
+        const target = promptRef.current;
+        if (target) {
+          player.interactAnim = 0.42;
+          retroAudio.uiClick();
+          interactRef.current(target);
+        }
+      }
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      keys[event.code] = false;
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (stageRef.current.dialogOpen || stageRef.current.challengeOpen) return;
+      const rect = canvas.getBoundingClientRect();
+      const worldX = (event.clientX - rect.left) / CAMERA_ZOOM + camera.x;
+      const worldY = (event.clientY - rect.top) / CAMERA_ZOOM + camera.y;
+      clickTarget = isIslaNatalPointWalkable(worldX, worldY) ? { x: worldX, y: worldY } : null;
+    };
+
+    const onBlur = () => {
+      for (const code of Object.keys(keys)) keys[code] = false;
+      clickTarget = null;
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    canvas.addEventListener('pointerdown', onPointerDown);
+
+    const arcadeTarget: NatalPromptTarget = {
+      kind: 'arcade',
+      id: 'arcade',
+      label: 'Examinar el gabinete',
+      accentHex: '#67e8f9',
+      x: ISLA_NATAL_ARCADE_ANCHOR.x,
+      y: ISLA_NATAL_ARCADE_ANCHOR.y,
+    };
+    const paddleTarget: NatalPromptTarget = {
+      kind: 'paddle',
+      id: 'paddle',
+      label: 'Recoger la paleta',
+      accentHex: '#e0faff',
+      x: ISLA_NATAL_PADDLE_ANCHOR.x,
+      y: ISLA_NATAL_PADDLE_ANCHOR.y,
+    };
+    const departureTarget: NatalPromptTarget = {
+      kind: 'departure',
+      id: 'departure',
+      label: 'Asomarse a la rompiente',
+      accentHex: '#a5b4fc',
+      x: ISLA_NATAL_DEPARTURE.x,
+      y: ISLA_NATAL_DEPARTURE.y,
+    };
+
+    let raf = 0;
+    let last = performance.now();
+    let elapsed = 0;
+
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      elapsed += dt;
+
+      const stage = stageRef.current;
+      const modalOpen = stage.dialogOpen || stage.challengeOpen;
+      const departure = departureRef.current;
+
+      player.interactAnim = Math.max(0, player.interactAnim - dt);
+
+      if (departure) {
+        departure.t += dt;
+        const k = Math.min(1, departure.t / departure.duration);
+        const e = k * k * (3 - 2 * k);
+        const baseX = cubicLerp(
+          departure.from.x,
+          departure.c1.x,
+          departure.c2.x,
+          departure.to.x,
+          e
+        );
+        const baseY = cubicLerp(
+          departure.from.y,
+          departure.c1.y,
+          departure.c2.y,
+          departure.to.y,
+          e
+        );
+
+        // Tangente de la trayectoria: orienta la tabla y la postura del cuerpo
+        const look = Math.min(1, e + 0.014);
+        let tx =
+          cubicLerp(departure.from.x, departure.c1.x, departure.c2.x, departure.to.x, look) -
+          baseX;
+        let ty =
+          cubicLerp(departure.from.y, departure.c1.y, departure.c2.y, departure.to.y, look) -
+          baseY;
+        if (Math.abs(tx) < 0.0001 && Math.abs(ty) < 0.0001) {
+          tx = 1;
+          ty = 0.35;
+        }
+        const angle = Math.atan2(ty, tx);
+        const weave = Math.sin(k * Math.PI * 3.2) * 20 * Math.sin(Math.PI * k);
+
+        player.x = baseX - Math.sin(angle) * weave;
+        player.y = baseY + Math.cos(angle) * weave;
+        player.rideTilt =
+          angle * 0.45 +
+          Math.cos(k * Math.PI * 3.2) * 0.14 +
+          (reducedMotion ? 0 : Math.sin(k * Math.PI * 7) * 0.05);
+        player.facingDir = tx >= 0 ? 'right' : 'left';
+        player.walking = false;
+        player.sprinting = false;
+
+        // Cámara libre: la tabla surca el mar abierto, sin los límites de la isla
+        const camFollow = Math.min(1, dt * 9);
+        camera.x += (player.x - viewW() * 0.5 - camera.x) * camFollow;
+        camera.y += (player.y - viewH() * 0.5 - camera.y) * camFollow;
+
+        // Salpicaduras a ambos cantos de la tabla y anillos de agua tras la carga
+        departure.nextRing -= dt;
+        if (!reducedMotion && departure.nextRing <= 0) {
+          departure.nextRing = 0.5;
+          shockwavesRef.current.push({
+            x: player.x - Math.cos(angle) * 26,
+            y: player.y - Math.sin(angle) * 26 + 12,
+            t: 0,
+            life: 0.85,
+          });
+        }
+        departure.nextSpray -= dt;
+        if (!reducedMotion && departure.nextSpray <= 0) {
+          departure.nextSpray = 0.035;
+          const sprayX =
+            player.x - Math.cos(angle) * (20 + Math.random() * 12);
+          const sprayY =
+            player.y - Math.sin(angle) * (20 + Math.random() * 12) + 10;
+          emitParticles(
+            particlesRef.current,
+            sprayX,
+            sprayY,
+            3,
+            k > 0.6 ? '#ffffff' : '#a5f3fc',
+            34,
+            -12
+          );
+        }
+
+        if (!boostFired && k > 0.32) {
+          boostFired = true;
+          retroAudio.pixelCurrentBoost();
+        }
+        if (!warpFired && k > 0.76) {
+          warpFired = true;
+          retroAudio.timeMachineWarp();
+          window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+        }
+        if (!departureFlashFired && k > 0.9) {
+          departureFlashFired = true;
+          stage.setDepartureFlash(true);
+          if (departureFlashTimer !== null) window.clearTimeout(departureFlashTimer);
+          departureFlashTimer = window.setTimeout(() => {
+            departureFlashTimer = null;
+            stageRef.current.setDepartureFlash(false);
+          }, 340);
+        }
+        if (k >= 1 && !departureFinished) {
+          departureFinished = true;
+          departureRef.current = null;
+          player.ridingPaddle = false;
+          player.rideTilt = 0;
+          if (departureFlashTimer !== null) {
+            window.clearTimeout(departureFlashTimer);
+            departureFlashTimer = null;
+          }
+          if (departureSafetyRef.current !== null) {
+            window.clearTimeout(departureSafetyRef.current);
+            departureSafetyRef.current = null;
+          }
+          stage.setDepartureFlash(false);
+          try {
+            stage.markFlag(NATAL_FLAGS.departed);
+          } catch (error) {
+            console.error('[PIXELVERSE] No se pudo registrar la partida:', error);
+          }
+          try {
+            stage.onDepartToOrigin();
+          } catch (error) {
+            // La isla sigue visible y jugable aunque falle la transición.
+            console.error('[PIXELVERSE] La transición a la Isla del Origen falló:', error);
+            departureFinished = false;
+            player.x = ISLA_NATAL_DEPARTURE.x;
+            player.y = ISLA_NATAL_DEPARTURE.y - 24;
+            portCooldownRef.current = performance.now() + 6000;
+            showToast('El oleaje se cerró: seguís en la isla. Volvé a la rompiente.');
+          }
+        }
+      } else if (!modalOpen) {
+        let dx = 0;
+        let dy = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+        if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+        if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+        if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+
+        if (dx !== 0 || dy !== 0) {
+          clickTarget = null;
+          const length = Math.hypot(dx, dy);
+          dx /= length;
+          dy /= length;
+        } else if (clickTarget) {
+          const tx = clickTarget.x - player.x;
+          const ty = clickTarget.y - player.y;
+          const dist = Math.hypot(tx, ty);
+          if (dist < 8) clickTarget = null;
+          else {
+            dx = tx / dist;
+            dy = ty / dist;
+          }
+        }
+
+        const sprinting = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
+        const speed = sprinting ? SPRINT_SPEED : WALK_SPEED;
+        player.sprinting = sprinting && (dx !== 0 || dy !== 0);
+        player.walking = dx !== 0 || dy !== 0;
+
+        if (player.walking) {
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            player.facingDir = dx >= 0 ? 'right' : 'left';
+          } else {
+            player.facingDir = dy >= 0 ? 'down' : 'up';
+          }
+
+          walkTimer += dt;
+          stepAudioTimer += dt * (player.sprinting ? 1.4 : 1);
+          if (stepAudioTimer >= 0.36) {
+            stepAudioTimer = 0;
+            retroAudio.stepTile(Math.floor(walkTimer * 4) % 2 === 0 ? 1 : 2);
+          }
+
+          const distance = speed * dt;
+          const nextX = player.x + dx * distance;
+          const nextY = player.y + dy * distance;
+          const canXY = isIslaNatalBoxWalkable(nextX, nextY);
+          const canX = canXY || isIslaNatalBoxWalkable(nextX, player.y);
+          const canY = canXY || isIslaNatalBoxWalkable(player.x, nextY);
+
+          if (canXY) {
+            player.x = nextX;
+            player.y = nextY;
+          } else if (canX) {
+            player.x = nextX;
+          } else if (canY) {
+            player.y = nextY;
+          } else {
+            clickTarget = null;
+          }
+        }
+      } else {
+        player.walking = false;
+        player.sprinting = false;
+      }
+
+      // Cámara con seguimiento suave (la partida en tabla ya mueve la cámara)
+      if (!departure) {
+        const target = cameraTarget();
+        const follow = Math.min(1, dt * 6.5);
+        camera.x += (target.x - camera.x) * follow;
+        camera.y += (target.y - camera.y) * follow;
+
+        // Zona actual
+        const zoneId = islaNatalZoneAt(player.x, player.y);
+        if (zoneId !== prevZoneId) {
+          stage.showZoneBanner(zoneId, prevZoneId === null);
+          prevZoneId = zoneId;
+        }
+      }
+
+      // El puerto norte ya no arranca solo: la travesía se elige con la opción
+      // «SURFEAR HACIA ISLA ORIGEN» cuando la barra está disponible.
+
+      // Intensidad ambiental
+      const chargeTarget = stage.arcadeState === 'won' ? 1 : stage.arcadeState === 'powered' ? 0.45 : 0;
+      chargeRef.current += (chargeTarget - chargeRef.current) * Math.min(1, dt * 0.7);
+      if (signalRef.current > 0) signalRef.current = Math.max(0, signalRef.current - dt * SIGNAL_DECAY);
+
+      // Partículas y ondas
+      const particles = particlesRef.current;
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= dt;
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 26 * dt;
+        p.vx *= 1 - 0.9 * dt;
+      }
+      const waves = shockwavesRef.current;
+      for (let i = waves.length - 1; i >= 0; i--) {
+        waves[i].t += dt;
+        if (waves[i].t >= waves[i].life) waves.splice(i, 1);
+      }
+
+      // Objetivo de interacción más cercano
+      const pick: { target: NatalPromptTarget | null; score: number } = {
+        target: null,
+        score: Number.POSITIVE_INFINITY,
+      };
+      const dirX = player.facingDir === 'left' ? -1 : player.facingDir === 'right' ? 1 : 0;
+      const dirY = player.facingDir === 'up' ? -1 : player.facingDir === 'down' ? 1 : 0;
+      const consider = (candidate: NatalPromptTarget, radius: number) => {
+        const dx = candidate.x - player.x;
+        const dy = candidate.y - player.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > radius) return;
+        let score = dist;
+        if (dist > 0.001) {
+          const dot = (dx * dirX + dy * dirY) / dist;
+          if (dot < -0.1 && dist > 30) score += 48;
+        }
+        if (score < pick.score) {
+          pick.score = score;
+          pick.target = candidate;
+        }
+      };
+
+      if (!departure) {
+        for (const poi of ISLA_NATAL_POIS) {
+          consider(
+            {
+              kind: 'poi',
+              id: poi.id,
+              label: poi.label,
+              accentHex: poi.accentHex,
+              x: poi.x,
+              y: poi.y,
+            },
+            poi.radius
+          );
+        }
+        consider(arcadeTarget, ISLA_NATAL_ARCADE_ANCHOR.radius);
+        if (stage.paddleOnGround) consider(paddleTarget, ISLA_NATAL_PADDLE_ANCHOR.radius);
+        // Puerto Norte: con la Barra de Pong disponible, la opción de surfear
+        // aparece de forma explícita. Sin la barra, sólo se puede asomarse.
+        departureTarget.label = stage.departureReady
+          ? 'Surfear hacia Isla Origen'
+          : 'Asomarse al puerto norte';
+        consider(departureTarget, ISLA_NATAL_DEPARTURE.radius);
+      }
+      const best = pick.target;
+      promptRef.current = best;
+
+      let promptSpec: IslaNatalPromptSpec | null = null;
+      if (best && !modalOpen) {
+        promptSpec = {
+          x: best.x,
+          y: best.y,
+          label: best.label,
+          accentHex: best.accentHex,
+        };
+      }
+
+      try {
+        ctx.save();
+        ctx.setTransform(dpr * CAMERA_ZOOM, 0, 0, dpr * CAMERA_ZOOM, 0, 0);
+        renderIslaNatalFrame({
+          ctx,
+          vw: viewW(),
+          vh: viewH(),
+          camera,
+          elapsed,
+          reducedMotion,
+          player: {
+            x: player.x,
+            y: player.y,
+            facingDir: player.facingDir,
+            walking: player.walking,
+            sprinting: player.sprinting,
+            interactAnim: player.interactAnim,
+            ridingPaddle: player.ridingPaddle,
+            rideTilt: player.rideTilt,
+          },
+          skinColor: stage.skinColor,
+          hairColor: stage.hairColor,
+          shirtColor: stage.shirtColor,
+          appearance: stage.appearance,
+          arcadeState: stage.arcadeState,
+          charge: chargeRef.current,
+          signalPulse: signalRef.current,
+          paddleOnGround: stage.paddleOnGround,
+          departureReady: stage.departureReady,
+          particles,
+          prompt: promptSpec,
+          shockwaves: waves,
+        });
+        ctx.restore();
+        renderFaultRef.current = 0;
+      } catch (error) {
+        try {
+          ctx.restore();
+        } catch {
+          /* la pila de canvas ya estaba limpia */
+        }
+        renderFaultRef.current += 1;
+        if (renderFaultRef.current === 4) {
+          console.error('[PIXELVERSE] El render de Isla Natal falló:', error);
+          setRenderFault(true);
+        }
+      }
+    };
+
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      motionQuery.removeEventListener('change', onMotionChange);
+    };
+  }, [keybindings]);
+
+  /* -------------------------------------------------------------- */
+  /* INTERFAZ                                                        */
+  /* -------------------------------------------------------------- */
+
+  const toneClass =
+    dialogModal?.tone === 'arcane'
+      ? 'dialogue-arcane'
+      : dialogModal?.tone === 'stone'
+        ? 'dialogue-stone'
+        : 'dialogue-wood';
+
+  return (
+    <div className="relative w-screen h-screen overflow-hidden select-none bg-[#020614]">
+      <canvas ref={canvasRef} className="crisp-arcade-canvas block w-full h-full cursor-crosshair" />
+
+      {/* Rótulo de zona */}
+      {zoneBanner && (
+        <div className="pointer-events-none absolute inset-x-0 top-[9%] z-20 flex justify-center px-4">
+          <div
+            className="glass-hud px-5 py-2.5 text-center"
+            style={{ borderColor: `${zoneBanner.accentHex}88` }}
+          >
+            <p
+              className="font-mono text-[13px] sm:text-base font-bold tracking-[0.22em] uppercase"
+              style={{ color: zoneBanner.accentHex }}
+            >
+              {zoneBanner.name}
+            </p>
+            <p className="font-mono text-[10px] sm:text-[11px] text-slate-300 mt-0.5">
+              {zoneBanner.subtitle}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso flotante */}
+      {toast && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[13%] z-20 flex justify-center px-4">
+          <p className="glass-hud px-4 py-2 font-mono text-[11px] sm:text-xs text-cyan-100 tracking-wide">
+            {toast}
+          </p>
+        </div>
+      )}
+
+      {/* Diálogo */}
+      {dialogModal && (
+        <div className="dialogue-backdrop fixed inset-0 z-40 flex items-end sm:items-center justify-center p-3 sm:p-5">
+          <div
+            className={`dialogue-frame ${toneClass} rounded-none w-full max-w-xl p-4 sm:p-6 space-y-3 relative max-h-[92vh] overflow-y-auto`}
+          >
+            <div className="flex items-start justify-between gap-3 border-b-2 border-dashed border-white/30 pb-2.5">
+              <div>
+                <p className="dialogue-kicker text-[10px] font-mono tracking-widest uppercase">
+                  {dialogModal.category}
+                </p>
+                <h3 className="dialogue-speaker font-mono text-base sm:text-lg font-bold mt-0.5">
+                  {dialogModal.dialog.title}
+                </h3>
+                {dialogModal.dialog.subtitle && (
+                  <p className="text-[11px] font-mono text-[#7dd3fc] mt-1">
+                    {dialogModal.dialog.subtitle}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialogModal(null)}
+                aria-label="Cerrar diálogo"
+                className="text-white hover:text-amber-300 cursor-pointer p-1 font-mono font-bold"
+              >
+                [X]
+              </button>
+            </div>
+
+            <div
+              className={`dialogue-copy space-y-2 text-xs sm:text-sm font-mono leading-relaxed ${
+                dialogueVisibleChars >= dialogueFullText.length ? 'dialogue-complete' : ''
+              }`}
+              onClick={() => setDialogueVisibleChars(dialogueFullText.length)}
+            >
+              {dialogModal.dialog.paragraphs.map((paragraph, index) => {
+                const start = dialogModal.dialog.paragraphs
+                  .slice(0, index)
+                  .reduce((total, previous) => total + previous.length + 2, 0);
+                return <p key={index}>{paragraph.slice(0, Math.max(0, dialogueVisibleChars - start))}</p>;
+              })}
+            </div>
+
+            {dialogModal.dialog.hint && (
+              <p className="pt-2 border-t border-white/20 text-[11px] text-amber-200 font-mono">
+                {dialogModal.dialog.hint}
+              </p>
+            )}
+
+            <div className="flex flex-wrap justify-end items-center gap-2 pt-2">
+              <span className="mr-auto font-mono text-[10px] text-slate-400 tracking-widest">
+                [ENTER] CONTINUAR
+              </span>
+              {dialogModal.primary && (
+                <button
+                  type="button"
+                  onClick={dialogModal.primary.run}
+                  className="dialogue-action px-4 py-1.5 font-mono font-bold text-xs uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  {dialogModal.primary.label}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reto de Pong dentro del cobertizo */}
+      {challengeOpen && (
+        <IslaNatalPongChallenge
+          onVictory={handleChallengeVictory}
+          onQuit={handleChallengeQuit}
+        />
+      )}
+
+      {/* Destello de la partida: pulso breve, nunca una pantalla blanca fija */}
+      <div
+        className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-300"
+        style={{
+          opacity: departureFlash ? 1 : 0,
+          background:
+            'radial-gradient(circle at 50% 50%, #ffffff 0%, #e0faff 26%, rgba(2, 6, 20, 0) 72%)',
+        }}
+        aria-hidden
+      />
+
+      {renderFault && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#020614]/95 p-6">
+          <div className="glass-hud max-w-md space-y-3 p-5 text-center">
+            <p className="font-mono text-sm font-bold text-cyan-100">
+              El oleaje se cortó un instante
+            </p>
+            <p className="font-mono text-xs text-slate-300">
+              Tu partida sigue intacta. Podés seguir explorando la isla o zarpar en la Barra de
+              Pong.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                className="btn-ui cursor-pointer rounded px-4 py-2 text-xs font-bold"
+                onClick={() => {
+                  renderFaultRef.current = 0;
+                  setRenderFault(false);
+                }}
+              >
+                Seguir en la isla
+              </button>
+              <button
+                type="button"
+                className="cursor-pointer rounded border border-cyan-300/40 bg-cyan-500/20 px-4 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-500/30"
+                onClick={() => {
+                  try {
+                    markFlag(NATAL_FLAGS.departed);
+                    onDepartToOrigin();
+                  } catch (error) {
+                    console.error('[PIXELVERSE] Transición de emergencia fallida:', error);
+                    setRenderFault(false);
+                  }
+                }}
+              >
+                Ir a la Isla del Origen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default IslaNatalStage;
