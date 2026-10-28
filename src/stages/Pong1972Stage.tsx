@@ -551,7 +551,7 @@ export function Pong1972Stage({
 
             {pongStarflight && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 glass-hud rounded px-4 py-1.5 text-xs font-mono-tabular text-[#00f3ff] pointer-events-none whitespace-nowrap">
-                ¡3 Goles alcanzados! Viajando sobre la barra de Pong hacia la Isla del Origen...
+                ¡3 Goles alcanzados! La barra de Pong desciende sobre la Isla de los 70...
               </div>
             )}
 
@@ -561,7 +561,7 @@ export function Pong1972Stage({
                   RONDA FINALIZADA ({p1Score} - {p2Score} GOLES)
                 </p>
                 <p className="text-xs sm:text-sm text-slate-300 max-w-sm font-ui">
-                  Alcanza 3 goles contra la IA para ganar la partida y viajar sobre la barra de Pong hacia la Isla del Origen.
+                  Alcanza 3 goles contra la IA para recuperar la memoria de Pong y seguir recorriendo la Isla de los 70 sobre la barra.
                 </p>
                 <button
                   type="button"

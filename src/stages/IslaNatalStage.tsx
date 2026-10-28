@@ -32,9 +32,13 @@ import {
   ISLA_NATAL_PADDLE_ANCHOR,
   ISLA_NATAL_POIS,
   ISLA_NATAL_SPAWN,
+  ISLA_NATAL_TRAVELER_SCENE_PLAYER,
+  ISLA_NATAL_TRAVELER_SITE,
   ISLA_NATAL_WORLD_H,
   ISLA_NATAL_WORLD_W,
   ISLA_NATAL_ZONES,
+  NATAL_STORM_QUESTION_DIALOG,
+  NATAL_TRAVELER_DIALOG,
   PADDLE_DIALOG,
   isCabinInteriorWalkable,
   isIslaNatalBoxWalkable,
@@ -49,10 +53,11 @@ import {
   type IslaNatalParticle,
   type IslaNatalPromptSpec,
 } from '../island/islaNatalRenderer';
+import { IslaNatalVista } from '../island/IslaNatalVista';
 import type { FacingDirection } from '../rpg/rpgContent';
 import { IslaNatalPongChallenge } from './IslaNatalPongChallenge';
 
-const CAMERA_ZOOM = 1.85;
+const CAMERA_ZOOM = 1.75;
 const WALK_SPEED = 200;
 const SPRINT_SPEED = 300;
 const SIGNAL_DECAY = 0.2;
@@ -110,6 +115,23 @@ const CABIN_BACKPACK_DIALOG: IslaNatalDialog = {
 const NATAL_FLAGS = ISLA_NATAL_FLAGS;
 
 type NatalPromptKind = 'poi' | 'arcade' | 'paddle' | 'departure' | 'cabin-exit' | 'cabin-backpack';
+
+/**
+ * Fases de la escena del viajero: la tormenta ocurre con Pixel dentro de la
+ * cabaña; al salir llega la nave, el encapuchado baja y habla cara a cara.
+ * `question` y `talk` esperan al diálogo.
+ */
+type TravelerPhase =
+  | 'none'
+  | 'radio'
+  | 'storm'
+  | 'question'
+  | 'exit'
+  | 'arrival'
+  | 'descend'
+  | 'talk'
+  | 'board'
+  | 'departure';
 
 interface NatalPromptTarget {
   kind: NatalPromptKind;
@@ -216,13 +238,33 @@ export function IslaNatalStage({
   const departureReady = pongWon && paddleCarried;
   const startAtNorthPort = pongWon && paddleCarried;
 
+  // Partida nueva: Pixel ya vive en la cabaña. La intro (radio, temblor y
+  // aviso del viajero) ocurre adentro antes de salir a la isla.
+  const introInsideCabin =
+    !flagSet.has(NATAL_FLAGS.firstLight) &&
+    !flagSet.has(NATAL_FLAGS.travelerWarning) &&
+    !pongWon &&
+    !arcadePowered;
+  const introInsideCabinRef = useRef(introInsideCabin);
+
   /* -------------------------------------------------------------- */
   /* DIÁLOGO                                                         */
   /* -------------------------------------------------------------- */
 
   const [dialogModal, setDialogModal] = useState<NatalDialogModal | null>(null);
   const [dialogueVisibleChars, setDialogueVisibleChars] = useState(0);
-  const dialogueFullText = dialogModal?.dialog.paragraphs.join('\n\n') ?? '';
+  const [dialogueLineIndex, setDialogueLineIndex] = useState(0);
+  const dialogueLines = dialogModal?.dialog.lines ?? null;
+  const dialogueLine = dialogueLines
+    ? dialogueLines[Math.min(dialogueLineIndex, dialogueLines.length - 1)]
+    : null;
+  const dialogueFullText = dialogueLine
+    ? dialogueLine.text
+    : (dialogModal?.dialog.paragraphs.join('\n\n') ?? '');
+
+  useEffect(() => {
+    setDialogueLineIndex(0);
+  }, [dialogModal]);
 
   useEffect(() => {
     if (!dialogModal) {
@@ -247,12 +289,37 @@ export function IslaNatalStage({
       retroAudio.tick();
       return;
     }
+    // Conversación por burbujas: una línea por vez, como en un RPG.
+    if (dialogueLines && dialogueLineIndex < dialogueLines.length - 1) {
+      setDialogueLineIndex((index) => index + 1);
+      retroAudio.uiClick();
+      return;
+    }
     if (dialogModal.primary) dialogModal.primary.run();
     else {
       setDialogModal(null);
       retroAudio.uiClick();
     }
   };
+
+  // La conversación respira sola: las líneas cortas avanzan sin obligar a
+  // pulsar una tecla entre cada frase. Un clic o [E] acelera el turno.
+  useEffect(() => {
+    if (!dialogModal || !dialogueLines) return undefined;
+    if (dialogueVisibleChars < dialogueFullText.length) return undefined;
+    const isLast = dialogueLineIndex >= dialogueLines.length - 1;
+    const timer = window.setTimeout(
+      () => advanceDialogueRef.current(),
+      isLast ? 2400 : 1500
+    );
+    return () => window.clearTimeout(timer);
+  }, [
+    dialogModal,
+    dialogueLines,
+    dialogueLineIndex,
+    dialogueFullText,
+    dialogueVisibleChars,
+  ]);
 
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -273,7 +340,24 @@ export function IslaNatalStage({
   /* -------------------------------------------------------------- */
 
   const [challengeOpen, setChallengeOpen] = useState(false);
+  const [vistaOpen, setVistaOpen] = useState(false);
   const [departureFlash, setDepartureFlash] = useState(false);
+  // Escena única del viajero del futuro. Bloquea el control mientras dura.
+  // En partida nueva arranca con la radio de la cabaña.
+  const [travelerPhase, setTravelerPhase] = useState<TravelerPhase>(() =>
+    introInsideCabinRef.current ? 'radio' : 'none'
+  );
+  const travelerPhaseRef = useRef<TravelerPhase>('none');
+  travelerPhaseRef.current = travelerPhase;
+  const travelerStartRef = useRef(0);
+  /** Pixel camina hasta la puerta antes de salir: la transición no es un corte. */
+  const exitWalkRef = useRef<{ x: number; y: number } | null>(null);
+  const doorExitTriggeredRef = useRef(false);
+  const cabinFadeTimerRef = useRef<number | null>(null);
+  const [cabinFade, setCabinFade] = useState(false);
+  /** La tormenta se dispara cuando Pixel ya está adentro de la cabaña. */
+  const [cabinInside, setCabinInside] = useState(introInsideCabinRef.current);
+  const travelerPendingRef = useRef(false);
   const [zoneBanner, setZoneBanner] = useState<{
     name: string;
     subtitle: string;
@@ -291,6 +375,7 @@ export function IslaNatalStage({
   useEffect(
     () => () => {
       if (zoneTimerRef.current !== null) window.clearTimeout(zoneTimerRef.current);
+      if (cabinFadeTimerRef.current !== null) window.clearTimeout(cabinFadeTimerRef.current);
     },
     []
   );
@@ -302,9 +387,14 @@ export function IslaNatalStage({
   const playerRef = useRef({
     // Al volver de Pong, el jugador aparece junto al puerto norte con la barra
     // lista: la salida queda a la vista en lugar de perderse en la playa sur.
-    x: (startAtNorthPort ? ISLA_NATAL_NORTH_PORT_SPAWN : ISLA_NATAL_SPAWN).x,
-    y: (startAtNorthPort ? ISLA_NATAL_NORTH_PORT_SPAWN : ISLA_NATAL_SPAWN).y,
-    facingDir: 'up' as FacingDirection,
+    // En partida nueva arranca adentro de la casa, frente a la radio.
+    x: introInsideCabinRef.current
+      ? ISLA_NATAL_CABIN.introSpot.x
+      : (startAtNorthPort ? ISLA_NATAL_NORTH_PORT_SPAWN : ISLA_NATAL_SPAWN).x,
+    y: introInsideCabinRef.current
+      ? ISLA_NATAL_CABIN.introSpot.y
+      : (startAtNorthPort ? ISLA_NATAL_NORTH_PORT_SPAWN : ISLA_NATAL_SPAWN).y,
+    facingDir: (introInsideCabinRef.current ? 'right' : 'up') as FacingDirection,
     walking: false,
     sprinting: false,
     interactAnim: 0,
@@ -326,10 +416,10 @@ export function IslaNatalStage({
   const clickResetRef = useRef<() => void>(() => {});
   /** Estado del interior de la cabaña y posición a la que se vuelve al salir. */
   const cabinRef = useRef({
-    inside: false,
-    savedX: 0,
-    savedY: 0,
-    savedFacing: 'down' as FacingDirection,
+    inside: introInsideCabinRef.current,
+    savedX: ISLA_NATAL_TRAVELER_SCENE_PLAYER.x,
+    savedY: ISLA_NATAL_TRAVELER_SCENE_PLAYER.y,
+    savedFacing: 'right' as FacingDirection,
   });
   const grantInventoryRef = useRef(onGrantInventoryItems);
   grantInventoryRef.current = onGrantInventoryItems;
@@ -345,6 +435,7 @@ export function IslaNatalStage({
     appearance,
     dialogOpen: false,
     challengeOpen,
+    vistaOpen,
     showZoneBanner,
     markFlag,
     onDepartToOrigin,
@@ -361,6 +452,7 @@ export function IslaNatalStage({
     appearance,
     dialogOpen: dialogModal !== null,
     challengeOpen,
+    vistaOpen,
     showZoneBanner,
     markFlag,
     onDepartToOrigin,
@@ -541,6 +633,16 @@ export function IslaNatalStage({
     player.walking = false;
     player.sprinting = false;
     clickResetRef.current();
+    setCabinInside(true);
+    // El aviso del viajero se vive desde adentro: la tormenta golpea la casa.
+    const flags = stageRef.current.flagSet;
+    if (
+      !flags.has(NATAL_FLAGS.travelerWarning) &&
+      !flags.has(NATAL_FLAGS.pongWon) &&
+      !flags.has(NATAL_FLAGS.arcadePowered)
+    ) {
+      travelerPendingRef.current = true;
+    }
     retroAudio.doorTransition();
     if (!stageRef.current.flagSet.has(NATAL_FLAGS.cabinVisited)) {
       markFlag(NATAL_FLAGS.cabinVisited);
@@ -558,6 +660,7 @@ export function IslaNatalStage({
     const cabin = cabinRef.current;
     if (!cabin.inside) return;
     cabin.inside = false;
+    setCabinInside(false);
     const player = playerRef.current;
     player.x = cabin.savedX;
     player.y = cabin.savedY;
@@ -566,6 +669,31 @@ export function IslaNatalStage({
     player.sprinting = false;
     retroAudio.doorTransition();
   }, []);
+
+  /** Cruce de puerta con fundido: Pixel ya caminó hasta el umbral. */
+  const finishCabinExit = useCallback(() => {
+    if (doorExitTriggeredRef.current) return;
+    doorExitTriggeredRef.current = true;
+    exitWalkRef.current = null;
+    setCabinFade(true);
+    if (cabinFadeTimerRef.current !== null) window.clearTimeout(cabinFadeTimerRef.current);
+    cabinFadeTimerRef.current = window.setTimeout(() => {
+      leaveCabin();
+      const player = playerRef.current;
+      player.x = ISLA_NATAL_TRAVELER_SCENE_PLAYER.x;
+      player.y = ISLA_NATAL_TRAVELER_SCENE_PLAYER.y;
+      player.facingDir = 'right';
+      player.walking = false;
+      player.sprinting = false;
+      setTravelerPhase('arrival');
+      cabinFadeTimerRef.current = window.setTimeout(() => {
+        setCabinFade(false);
+        cabinFadeTimerRef.current = null;
+      }, 500);
+    }, 240);
+  }, [leaveCabin]);
+  const finishCabinExitRef = useRef(finishCabinExit);
+  finishCabinExitRef.current = finishCabinExit;
 
   const takeCabinBackpack = useCallback(() => {
     if (stageRef.current.flagSet.has(NATAL_FLAGS.backpack)) return;
@@ -595,10 +723,31 @@ export function IslaNatalStage({
     });
   }, [markFlag, showToast]);
 
+  const openVista = useCallback(() => {
+    // El jugador se detiene frente al catalejo antes de abrir la vista lejana.
+    clickResetRef.current();
+    const player = playerRef.current;
+    player.walking = false;
+    player.sprinting = false;
+    retroAudio.zoneChime();
+    setVistaOpen(true);
+  }, []);
+
+  const closeVista = useCallback(() => {
+    setVistaOpen(false);
+    retroAudio.uiClick();
+  }, []);
+
   const interactPoi = useCallback(
     (poiId: string) => {
       if (poiId === 'puerta-cabana') {
         enterCabin();
+        return;
+      }
+      // El mirador del Alto de las Rocas abre la vista lejana de la Isla del
+      // Origen en lugar de un diálogo: el catalejo apunta hacia el horizonte.
+      if (poiId === 'oteo-isla') {
+        openVista();
         return;
       }
       const poi = ISLA_NATAL_POIS.find((entry) => entry.id === poiId);
@@ -612,7 +761,7 @@ export function IslaNatalStage({
         dialog: poi.dialog,
       });
     },
-    [enterCabin]
+    [enterCabin, openVista]
   );
 
   const handleInteract = useCallback(
@@ -672,7 +821,31 @@ export function IslaNatalStage({
   /* -------------------------------------------------------------- */
 
   const arrivalAnnouncedRef = useRef(flagSet.has(NATAL_FLAGS.firstLight));
+  // El aviso del viajero solo ocurre si el primer Pong sigue pendiente.
+  const travelerWarningPending =
+    !flagSet.has(NATAL_FLAGS.travelerWarning) && !pongWon && !arcadePowered;
+  const travelerStartedRef = useRef(false);
+
+  const startTravelerStorm = useCallback(() => {
+    if (travelerStartedRef.current) return;
+    travelerStartedRef.current = true;
+    travelerPendingRef.current = false;
+    const player = playerRef.current;
+    player.walking = false;
+    player.sprinting = false;
+    clickResetRef.current();
+    setDialogModal(null);
+    travelerStartRef.current = performance.now();
+    setTravelerPhase('storm');
+  }, []);
+
   useEffect(() => {
+    // Partida nueva: la aventura abre con Pixel escuchando la radio en la casa.
+    if (introInsideCabinRef.current) {
+      markFlag(NATAL_FLAGS.firstLight);
+      markFlag(NATAL_FLAGS.cabinVisited);
+      return undefined;
+    }
     if (arrivalAnnouncedRef.current) return;
     arrivalAnnouncedRef.current = true;
     const timer = window.setTimeout(() => {
@@ -685,6 +858,159 @@ export function IslaNatalStage({
     }, 850);
     return () => window.clearTimeout(timer);
   }, [markFlag]);
+
+  // La tormenta golpea con Pixel ya adentro de la casa, después del diálogo de entrada.
+  useEffect(() => {
+    if (!travelerPendingRef.current || !travelerWarningPending) return;
+    if (!cabinInside || dialogModal !== null) return;
+    if (travelerStartedRef.current) return;
+    const timer = window.setTimeout(startTravelerStorm, 900);
+    return () => window.clearTimeout(timer);
+  }, [cabinInside, dialogModal, travelerWarningPending, startTravelerStorm]);
+
+  // Secuencia: tormenta → pregunta → salida → llegada → descenso → diálogo → partida.
+  useEffect(() => {
+    if (travelerPhase === 'none') return undefined;
+    travelerStartRef.current = performance.now();
+
+    if (travelerPhase === 'radio') {
+      // La radio de la mesa suena antes del temblor.
+      retroAudio.radioBroadcast();
+      const done = window.setTimeout(() => setTravelerPhase('storm'), 2900);
+      return () => window.clearTimeout(done);
+    }
+
+    if (travelerPhase === 'storm') {
+      retroAudio.thunderRoll();
+      retroAudio.flashBurst();
+      window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+      const secondFlash = window.setTimeout(() => {
+        retroAudio.thunderRoll();
+        retroAudio.flashBurst();
+        window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+      }, 1150);
+      const thirdFlash = window.setTimeout(() => {
+        retroAudio.flashBurst();
+        window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+      }, 2250);
+      const done = window.setTimeout(() => {
+        setDialogModal({
+          category: 'ISLA NATAL · LA TORMENTA',
+          tone: 'wood',
+          dialog: NATAL_STORM_QUESTION_DIALOG,
+          primary: {
+            label: 'Salir a revisar',
+            run: () => {
+              setDialogModal(null);
+              setTravelerPhase('exit');
+            },
+          },
+        });
+        setTravelerPhase('question');
+      }, 3400);
+      return () => {
+        window.clearTimeout(secondFlash);
+        window.clearTimeout(thirdFlash);
+        window.clearTimeout(done);
+      };
+    }
+
+    if (travelerPhase === 'exit') {
+      // Pixel camina hasta la puerta; el bucle mueve el sprite y el cruce se
+      // resuelve con un fundido, no con un cambio instantáneo de escena.
+      exitWalkRef.current = {
+        x: ISLA_NATAL_CABIN.door.x,
+        y: ISLA_NATAL_CABIN.door.y - 6,
+      };
+      doorExitTriggeredRef.current = false;
+      const safety = window.setTimeout(() => finishCabinExitRef.current(), 4200);
+      return () => {
+        window.clearTimeout(safety);
+        exitWalkRef.current = null;
+      };
+    }
+
+    if (travelerPhase === 'arrival') {
+      retroAudio.timeMachineWarp();
+      window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+      const done = window.setTimeout(() => {
+        emitParticles(
+          particlesRef.current,
+          ISLA_NATAL_TRAVELER_SITE.x,
+          ISLA_NATAL_TRAVELER_SITE.y - 6,
+          54,
+          '#cbd5e1',
+          96,
+          26
+        );
+        emitParticles(
+          particlesRef.current,
+          ISLA_NATAL_TRAVELER_SITE.x,
+          ISLA_NATAL_TRAVELER_SITE.y - 2,
+          24,
+          '#67e8f9',
+          72,
+          18
+        );
+        setTravelerPhase('descend');
+      }, 2500);
+      return () => window.clearTimeout(done);
+    }
+
+    if (travelerPhase === 'descend') {
+      const done = window.setTimeout(() => {
+        setDialogModal({
+          category: 'ISLA NATAL · EL VIAJERO',
+          tone: 'arcane',
+          dialog: NATAL_TRAVELER_DIALOG,
+          primary: {
+            label: 'Verlo partir',
+            run: () => {
+              setDialogModal(null);
+              setTravelerPhase('board');
+            },
+          },
+        });
+        setTravelerPhase('talk');
+      }, 1800);
+      return () => window.clearTimeout(done);
+    }
+
+    if (travelerPhase === 'board') {
+      const done = window.setTimeout(() => setTravelerPhase('departure'), 1500);
+      return () => window.clearTimeout(done);
+    }
+
+    if (travelerPhase === 'departure') {
+      retroAudio.timeMachineWarp();
+      window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+      emitParticles(
+        particlesRef.current,
+        ISLA_NATAL_TRAVELER_SITE.x,
+        ISLA_NATAL_TRAVELER_SITE.y - 4,
+        40,
+        '#cbd5e1',
+        86,
+        22
+      );
+      const done = window.setTimeout(() => {
+        markFlag(NATAL_FLAGS.travelerWarning);
+        setTravelerPhase('none');
+      }, 2200);
+      return () => window.clearTimeout(done);
+    }
+
+    return undefined;
+  }, [travelerPhase, markFlag, leaveCabin]);
+
+  // Si el diálogo se cierra sin usar su acción principal, la escena avanza igual.
+  useEffect(() => {
+    if (travelerPhase === 'question' && dialogModal === null) {
+      setTravelerPhase('exit');
+    } else if (travelerPhase === 'talk' && dialogModal === null) {
+      setTravelerPhase('board');
+    }
+  }, [travelerPhase, dialogModal]);
 
   /* -------------------------------------------------------------- */
   /* BUCLE PRINCIPAL                                                 */
@@ -791,6 +1117,31 @@ export function IslaNatalStage({
       }
 
       if (stage.challengeOpen || departureRef.current) return;
+      if (
+        travelerPhaseRef.current === 'radio' ||
+        travelerPhaseRef.current === 'storm' ||
+        travelerPhaseRef.current === 'exit' ||
+        travelerPhaseRef.current === 'arrival' ||
+        travelerPhaseRef.current === 'descend' ||
+        travelerPhaseRef.current === 'board' ||
+        travelerPhaseRef.current === 'departure'
+      ) {
+        return;
+      }
+
+      if (stage.vistaOpen) {
+        if (
+          event.code === 'Escape' ||
+          isActionPressed(event, 'interact', keybindings) ||
+          isActionPressed(event, 'confirm', keybindings) ||
+          event.code === 'Enter' ||
+          event.code === 'Space'
+        ) {
+          event.preventDefault();
+          if (!event.repeat) closeVista();
+        }
+        return;
+      }
 
       if (stage.dialogOpen) {
         if (
@@ -830,7 +1181,14 @@ export function IslaNatalStage({
     };
 
     const onPointerDown = (event: PointerEvent) => {
-      if (stageRef.current.dialogOpen || stageRef.current.challengeOpen) return;
+      if (
+        stageRef.current.dialogOpen ||
+        stageRef.current.challengeOpen ||
+        stageRef.current.vistaOpen ||
+        travelerPhaseRef.current !== 'none'
+      ) {
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
       const zoom = sceneZoom();
       const worldX = (event.clientX - rect.left) / zoom + camera.x;
@@ -885,7 +1243,11 @@ export function IslaNatalStage({
       elapsed += dt;
 
       const stage = stageRef.current;
-      const modalOpen = stage.dialogOpen || stage.challengeOpen;
+      const modalOpen =
+        stage.dialogOpen ||
+        stage.challengeOpen ||
+        stage.vistaOpen ||
+        travelerPhaseRef.current !== 'none';
       const departure = departureRef.current;
 
       player.interactAnim = Math.max(0, player.interactAnim - dt);
@@ -1016,6 +1378,34 @@ export function IslaNatalStage({
             portCooldownRef.current = performance.now() + 6000;
             showToast('El oleaje se cerró: seguís en la isla. Volvé a la rompiente.');
           }
+        }
+      } else if (travelerPhaseRef.current === 'exit' && exitWalkRef.current) {
+        // Salida de la cabaña: Pixel cruza la sala caminando hasta la puerta.
+        const target = exitWalkRef.current;
+        const tx = target.x - player.x;
+        const ty = target.y - player.y;
+        const dist = Math.hypot(tx, ty);
+        if (dist > 1.4) {
+          const stepLen = Math.min(dist, 82 * dt);
+          const nx = player.x + (tx / dist) * stepLen;
+          const ny = player.y + (ty / dist) * stepLen;
+          player.x = nx;
+          player.y = ny;
+          player.facingDir =
+            Math.abs(tx) >= Math.abs(ty) ? (tx >= 0 ? 'right' : 'left') : ty >= 0 ? 'down' : 'up';
+          player.walking = true;
+          player.sprinting = false;
+          stepAudioTimer += dt;
+          if (stepAudioTimer >= 0.3) {
+            stepAudioTimer = 0;
+            retroAudio.stepTile(Math.floor(elapsed * 5) % 2 === 0 ? 1 : 2);
+          }
+        } else {
+          player.x = target.x;
+          player.y = target.y;
+          player.walking = false;
+          player.sprinting = false;
+          finishCabinExitRef.current();
         }
       } else if (!modalOpen) {
         let dx = 0;
@@ -1239,6 +1629,10 @@ export function IslaNatalStage({
         ctx.save();
         ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, 0, 0);
         if (cabinRef.current.inside) {
+          const stormNow =
+            travelerPhaseRef.current === 'storm'
+              ? { t: Math.max(0, (now - travelerStartRef.current) / 1000) }
+              : null;
           renderIslaNatalCabin({
             ctx,
             vw: viewW(),
@@ -1253,8 +1647,22 @@ export function IslaNatalStage({
             appearance: stage.appearance,
             prompt: promptSpec,
             backpackOnHook: !stage.flagSet.has(NATAL_FLAGS.backpack),
+            radioOn: travelerPhaseRef.current === 'radio',
+            storm: stormNow,
           });
         } else {
+          const travelerPhaseNow = travelerPhaseRef.current;
+          const travelerEvent =
+            travelerPhaseNow === 'arrival' ||
+            travelerPhaseNow === 'descend' ||
+            travelerPhaseNow === 'talk' ||
+            travelerPhaseNow === 'board' ||
+            travelerPhaseNow === 'departure'
+              ? {
+                  phase: travelerPhaseNow,
+                  t: Math.max(0, (now - travelerStartRef.current) / 1000),
+                }
+              : null;
           renderIslaNatalFrame({
             ctx,
             vw: viewW(),
@@ -1275,6 +1683,7 @@ export function IslaNatalStage({
             particles,
             prompt: promptSpec,
             shockwaves: waves,
+            travelerEvent,
           });
         }
         ctx.restore();
@@ -1316,10 +1725,19 @@ export function IslaNatalStage({
       : dialogModal?.tone === 'stone'
         ? 'dialogue-stone'
         : 'dialogue-wood';
+  const comicConversation = Boolean(dialogueLines && dialogueLine);
+  const comicSpeaker = dialogueLine?.speaker ?? 'pixel';
+  const comicTextDone = dialogueVisibleChars >= dialogueFullText.length;
+  const comicIsLast = dialogueLines
+    ? dialogueLineIndex >= dialogueLines.length - 1
+    : false;
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none bg-[#020614]">
       <canvas ref={canvasRef} className="crisp-arcade-canvas block w-full h-full cursor-crosshair" />
+
+      {/* Fundido del umbral: Pixel ya caminó hasta la puerta. */}
+      {cabinFade && <div className="cabin-door-fade pointer-events-none fixed inset-0 z-30 bg-[#020614]" />}
 
       {/* Rótulo de zona */}
       {zoneBanner && (
@@ -1351,7 +1769,50 @@ export function IslaNatalStage({
       )}
 
       {/* Diálogo */}
-      {dialogModal && (
+      {dialogModal && comicConversation && dialogueLine && (
+        <div className="comic-dialogue-layer fixed inset-0 z-40 flex flex-col justify-end px-3 pb-5 sm:px-8 sm:pb-8 pointer-events-none">
+          <div
+            className={`flex w-full ${
+              comicSpeaker === 'pixel' ? 'justify-start' : 'justify-end'
+            }`}
+          >
+            <div
+              className={`comic-bubble comic-bubble-${comicSpeaker} pointer-events-auto`}
+              role="button"
+              tabIndex={0}
+              onClick={() => advanceDialogueRef.current()}
+              onKeyDown={(event) => {
+                if (event.code === 'Enter' || event.code === 'Space') {
+                  event.preventDefault();
+                  advanceDialogueRef.current();
+                }
+              }}
+            >
+              <div className="comic-speaker-tag">
+                <span className="comic-speaker-dot" />
+                {comicSpeaker === 'pixel' ? 'PIXEL' : 'EL VIAJERO'}
+              </div>
+              <p className="comic-text">
+                {dialogueLine.text.slice(0, dialogueVisibleChars)}
+                {!comicTextDone && <span className="comic-caret" aria-hidden="true" />}
+              </p>
+              {comicTextDone && (
+                <span
+                  className={`comic-next ${comicIsLast ? 'comic-next-final' : ''}`}
+                  aria-hidden="true"
+                >
+                  ▼
+                </span>
+              )}
+            </div>
+          </div>
+          <p className="comic-hint">
+            CLIC / [E] · {comicIsLast ? 'CONTINUAR' : 'SIGUIENTE'}
+          </p>
+        </div>
+      )}
+
+      {dialogModal && !comicConversation && (
         <div className="dialogue-backdrop fixed inset-0 z-40 flex items-end sm:items-center justify-center p-3 sm:p-5">
           <div
             className={`dialogue-frame ${toneClass} rounded-none w-full max-w-xl p-4 sm:p-6 space-y-3 relative max-h-[92vh] overflow-y-auto`}
@@ -1417,6 +1878,9 @@ export function IslaNatalStage({
           </div>
         </div>
       )}
+
+      {/* Vista lejana desde el mirador del Alto de las Rocas */}
+      {vistaOpen && <IslaNatalVista onClose={closeVista} />}
 
       {/* Reto de Pong dentro del cobertizo */}
       {challengeOpen && (

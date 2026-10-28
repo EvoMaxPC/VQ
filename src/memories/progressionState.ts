@@ -115,6 +115,8 @@ export interface PixelverseProgressState {
   schemaVersion: number;
   games: Record<string, GameRestorationRecord>;
   diamondsSaved: number;
+  /** Diamantes ya invertidos en mejoras. El saldo disponible es diamondsSaved - diamondsSpent. */
+  diamondsSpent: number;
   restoredCount: number;
   island70s: Island70sExplorationState;
   rpg: RpgExplorationState;
@@ -230,6 +232,7 @@ export function createInitialProgressState(): PixelverseProgressState {
       galaxian: createDefaultRecord('galaxian'),
     },
     diamondsSaved: 0,
+    diamondsSpent: 0,
     restoredCount: 0,
     island70s: createDefaultIsland70sState(),
     rpg: createDefaultRpgState(),
@@ -715,11 +718,16 @@ export function loadProgressState(): PixelverseProgressState {
       uniqueDiamondCount,
       Math.max(0, Number(parsed.diamondsSaved) || 0)
     );
+    const savedSpent = Math.min(
+      savedDiamonds,
+      Math.max(0, Number(parsed.diamondsSpent) || 0)
+    );
 
     return {
       schemaVersion: 3,
       games: mergedGames,
       diamondsSaved: savedDiamonds,
+      diamondsSpent: savedSpent,
       restoredCount: countRestored(mergedGames),
       island70s: coherentIsland,
       rpg: coherentRpg,
@@ -826,6 +834,7 @@ export function recordGameVictory(
       coherentIsland.collectedDiamondIds.length,
       diamondsEarned
     ),
+    diamondsSpent: Math.max(0, Number(prev.diamondsSpent) || 0),
     restoredCount: countRestored(nextGames),
     island70s: coherentIsland,
     rpg: coherentRpg,
@@ -1142,11 +1151,25 @@ export function discoverRpgSecret(
   secretId: string
 ): PixelverseProgressState {
   if (prev.rpg.discoveredSecretIds.includes(secretId)) return prev;
+  const powers = prev.rpg.powersState;
+  const rechargeScanner =
+    powers?.upgradesPurchased.includes('upg-scanner-recharge-1') ?? false;
+  const nextPowers =
+    powers && rechargeScanner
+      ? {
+          ...powers,
+          scannerEnergy: Math.min(
+            powers.maxScannerEnergy,
+            powers.scannerEnergy + 5
+          ),
+        }
+      : powers;
   const next: PixelverseProgressState = {
     ...prev,
     rpg: {
       ...prev.rpg,
       discoveredSecretIds: [...prev.rpg.discoveredSecretIds, secretId],
+      ...(nextPowers ? { powersState: nextPowers } : {}),
     },
   };
   saveProgressState(next);
@@ -1545,6 +1568,20 @@ export function updatePowerEnergy(
   return next;
 }
 
+const POWER_UPGRADE_COSTS: Record<string, number> = {
+  'upg-flight-tank-1': 2,
+  'upg-flight-efficiency-1': 3,
+  'upg-lantern-battery-1': 1,
+  'upg-lantern-radius-1': 2,
+  'upg-scanner-range-1': 2,
+  'upg-scanner-recharge-1': 2,
+  'upg-welder-efficiency-1': 2,
+};
+
+export function getAvailableDiamonds(state: PixelverseProgressState): number {
+  return Math.max(0, state.diamondsSaved - (state.diamondsSpent ?? 0));
+}
+
 export function purchasePowerUpgrade(
   prev: PixelverseProgressState,
   upgradeId: string,
@@ -1564,6 +1601,10 @@ export function purchasePowerUpgrade(
 
   if (current.upgradesPurchased.includes(upgradeId)) return prev;
 
+  const cost = POWER_UPGRADE_COSTS[upgradeId];
+  if (cost === undefined) return prev;
+  if (getAvailableDiamonds(prev) < cost) return prev;
+
   let nextMaxFlight = current.maxFlightFuel;
   let nextMaxLantern = current.maxLanternBattery;
   if (upgradeId === 'upg-flight-tank-1') nextMaxFlight = 150;
@@ -1571,6 +1612,7 @@ export function purchasePowerUpgrade(
 
   const next: PixelverseProgressState = {
     ...prev,
+    diamondsSpent: (prev.diamondsSpent ?? 0) + cost,
     rpg: {
       ...prev.rpg,
       powersState: {

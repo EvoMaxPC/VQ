@@ -30,7 +30,7 @@ import {
   Gem,
 } from 'lucide-react';
 import { retroAudio } from '../audio/retroAudio';
-import { PixelverseProgressState } from '../memories/progressionState';
+import { PixelverseProgressState, getAvailableDiamonds } from '../memories/progressionState';
 
 /* ============================================================================
    ILUSTRACIONES PIXEL ART (CANVAS DE BAJA RESOLUCIÓN ESCALADO)
@@ -865,7 +865,7 @@ export function PowersMenu({
 
   const inventory = progressState.rpg.inventoryItems;
   const abilities = progressState.island70s.abilitiesUnlocked;
-  const collectedDiamondsCount = progressState.island70s.collectedDiamondIds.length;
+  const availableDiamonds = getAvailableDiamonds(progressState);
 
   const pongUnlocked =
     allUnlocked ||
@@ -1181,7 +1181,7 @@ export function PowersMenu({
 
           <div className="hidden items-center gap-1.5 border border-[#c49e54]/35 bg-[#0a1320] px-2 py-1 text-[10px] font-bold text-[#f0d9a2] sm:flex">
             <Gem className="h-3 w-3 text-[#7dd3fc]" />
-            <span className="tabular-nums">{collectedDiamondsCount}</span>
+            <span className="tabular-nums">{availableDiamonds}</span>
             <span className="text-[8px] uppercase tracking-wider text-[#7f8fa5]">Diamantes</span>
           </div>
 
@@ -1427,13 +1427,13 @@ export function PowersMenu({
                               ) : (
                                 <button
                                   type="button"
-                                  disabled={collectedDiamondsCount < upg.costDiamonds}
+                                  disabled={availableDiamonds < upg.costDiamonds}
                                   onClick={() => {
                                     retroAudio.uiClick();
                                     onUpgradePower(upg.id, upg.costDiamonds);
                                   }}
                                   className={`flex shrink-0 cursor-pointer items-center gap-1 border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide transition-colors ${
-                                    collectedDiamondsCount >= upg.costDiamonds
+                                    availableDiamonds >= upg.costDiamonds
                                       ? 'border-[#f0d9a2] bg-[#e2be74] text-[#1a1206] hover:bg-[#f3d99a]'
                                       : 'cursor-not-allowed border-slate-700 bg-slate-800 text-slate-500'
                                   }`}

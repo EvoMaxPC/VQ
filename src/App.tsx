@@ -485,6 +485,13 @@ export default function App() {
   );
   const [activeState, setActiveState] = useState<ViewStateId>('state-cinematic');
   const [cinematicRunKey, setCinematicRunKey] = useState<number>(1);
+  // El prólogo se divide en dos actos: la catástrofe (antes del avatar) y el
+  // encuentro con la pelota que quedó (después de crear la identidad).
+  const [cinematicSegment, setCinematicSegment] = useState<{ start: number; end: number }>({
+    start: 0,
+    end: 180,
+  });
+  const pendingEncounterIntroRef = useRef(false);
   // Estado persistente de aventura e historial
   const [progressState, setProgressState] = useState<PixelverseProgressState>(() =>
     loadProgressState()
@@ -789,11 +796,19 @@ export default function App() {
   }, []);
 
   const handleCinematicComplete = useCallback(() => {
+    // El segundo acto del prólogo es la antesala directa de Isla Natal.
+    if (cinematicSegment.start > 0) {
+      setIslandArrivalMode('awakening');
+      managerRef.current?.transitionTo('state-isla-natal');
+      return;
+    }
     managerRef.current?.transitionTo('state-title');
-  }, []);
+  }, [cinematicSegment.start]);
 
   const handleReplayCinematic = useCallback(() => {
     retroAudio.uiClick();
+    pendingEncounterIntroRef.current = false;
+    setCinematicSegment({ start: 0, end: 210 });
     setCinematicRunKey((k) => k + 1);
     managerRef.current?.transitionTo('state-cinematic');
   }, []);
@@ -806,6 +821,13 @@ export default function App() {
 
   const handleConfirmAvatar = useCallback(() => {
     retroAudio.uiClick();
+    if (pendingEncounterIntroRef.current) {
+      pendingEncounterIntroRef.current = false;
+      setCinematicSegment({ start: 180, end: 210 });
+      setCinematicRunKey((k) => k + 1);
+      managerRef.current?.transitionTo('state-cinematic');
+      return;
+    }
     const natalEvents = progressState.island70s.narrativeEvents;
     if (!natalEvents.includes(ISLA_NATAL_FLAGS.departed)) {
       managerRef.current?.transitionTo('state-isla-natal');
@@ -888,6 +910,8 @@ export default function App() {
     setCodeModalOpen(false);
 
     if (targetState === 'state-cinematic') {
+      pendingEncounterIntroRef.current = false;
+      setCinematicSegment({ start: 0, end: 210 });
       setCinematicRunKey((k) => k + 1);
     } else if (targetState === 'state-pong') {
       setPongSkipIntro(true);
@@ -974,6 +998,8 @@ export default function App() {
       saveFeedbackTimerRef.current = null;
     }
     setIslandArrivalMode('awakening');
+    // Partida nueva: al confirmar el avatar se reproduce el acto del encuentro.
+    pendingEncounterIntroRef.current = true;
     managerRef.current?.transitionTo('state-avatar');
   }, []);
 
@@ -1404,7 +1430,8 @@ export default function App() {
           <EpicCinematicStage
             runKey={cinematicRunKey}
             onComplete={handleCinematicComplete}
-            onEnterPong={handleConfirmAvatar}
+            startAtSec={cinematicSegment.start}
+            endAtSec={cinematicSegment.end}
           />
         )}
       </section>
@@ -1624,20 +1651,14 @@ export default function App() {
               setProgressState((prev) => markCeremonyCompleted(prev, 'pong'));
             }}
             onReturnToIslandOnBoard={() => {
-              // Tras ganar Pong la aventura continúa en la Isla Natal: el jugador
-              // recibe la Barra de Pong y aparece junto al puerto norte, desde
-              // donde puede surfear hasta la Isla del Origen. Todo el estado se
-              // aplica en una sola actualización para que la isla monte ya con
-              // la salida habilitada.
-              setProgressState((prev) => {
-                let next = markTransitionFinished(prev, 'pong', true);
-                next = recordNarrativeEvent(next, ISLA_NATAL_FLAGS.arcadePowered);
-                next = recordNarrativeEvent(next, ISLA_NATAL_FLAGS.pongWon);
-                next = recordNarrativeEvent(next, ISLA_NATAL_FLAGS.signal);
-                next = recordNarrativeEvent(next, ISLA_NATAL_FLAGS.paddle);
-                return grantPongBoardAbility(next);
-              });
-              managerRef.current?.transitionTo('state-isla-natal');
+              // El gabinete histórico vive dentro de la Isla del Origen: la tabla
+              // desciende sobre la propia isla de los 70 y no repite el primer
+              // desafío de Isla Natal ni reescribe sus banderas.
+              setProgressState((prev) =>
+                grantPongBoardAbility(markTransitionFinished(prev, 'pong', true))
+              );
+              setIslandArrivalMode('standard');
+              managerRef.current?.transitionTo('state-archipelago');
             }}
             onBackToIsland={() => {
               setIslandArrivalMode('standard');

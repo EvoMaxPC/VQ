@@ -719,6 +719,137 @@ button:focus-visible {
 @keyframes dialogue-indicator { 50% { transform: translateY(3px); } }
 @media (max-width: 640px) { .backpack-frame .inventory-slots { max-height: 34vh; } .dialogue-copy { min-height: 4.5rem; padding: .7rem; } }
 
+/* =========================================
+   CONVERSACIÓN 1 VS 1: BURBUJAS DE HISTORIETA
+   ========================================= */
+.comic-dialogue-layer {
+  background: linear-gradient(0deg, rgba(2,6,20,.62), rgba(2,6,20,0) 52%);
+}
+.comic-bubble {
+  position: relative;
+  width: min(680px, 92vw);
+  padding: 1.15rem 1.35rem 1.3rem;
+  color: #111827;
+  background:
+    radial-gradient(circle at 16% 20%, rgba(17,24,39,.055) 0 1px, transparent 1.5px) 0 0 / 7px 7px,
+    #fffdf2;
+  border: 3px solid #111827;
+  border-radius: 15px 15px 15px 5px;
+  box-shadow: 6px 6px 0 rgba(2,6,20,.8), inset 0 0 0 2px #fff;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  animation: comic-bubble-pop 170ms steps(4, end) both;
+  cursor: pointer;
+  outline: none;
+}
+.comic-bubble-traveler {
+  border-radius: 15px 15px 5px 15px;
+}
+.comic-bubble::after {
+  content: '';
+  position: absolute;
+  left: 26px;
+  bottom: -13px;
+  width: 19px;
+  height: 19px;
+  background: #fffdf2;
+  border-right: 3px solid #111827;
+  border-bottom: 3px solid #111827;
+  transform: rotate(45deg);
+}
+.comic-bubble-traveler::after {
+  left: auto;
+  right: 26px;
+}
+.comic-speaker-tag {
+  position: absolute;
+  top: -15px;
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 3px;
+  color: #111827;
+  background: #fbbf24;
+  border: 2px solid #111827;
+  border-radius: 8px;
+  box-shadow: 2px 2px 0 rgba(2,6,20,.85);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  line-height: 1.4;
+}
+.comic-bubble-traveler .comic-speaker-tag {
+  left: auto;
+  right: 20px;
+  color: #082f36;
+  background: #67e8f9;
+}
+.comic-speaker-dot {
+  width: 5px;
+  height: 5px;
+  background: #111827;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #111827;
+}
+.comic-text {
+  min-height: 3.1rem;
+  margin: 0;
+  font-size: clamp(14px, 1.7vw, 17px);
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: .005em;
+}
+.comic-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: #111827;
+  animation: comic-caret-blink 520ms steps(2, end) infinite;
+}
+.comic-next {
+  position: absolute;
+  right: 15px;
+  bottom: 7px;
+  color: #111827;
+  font-size: 12px;
+  animation: comic-next-bounce 650ms steps(2, end) infinite;
+}
+.comic-next-final {
+  color: #b45309;
+}
+.comic-hint {
+  margin: .85rem auto 0;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-shadow: 1px 1px 0 #020614;
+}
+.cabin-door-fade {
+  animation: cabin-door-fade 720ms ease-in-out both;
+}
+@keyframes comic-bubble-pop {
+  from { opacity: 0; transform: translateY(9px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes comic-caret-blink { 50% { opacity: 0; } }
+@keyframes comic-next-bounce { 50% { transform: translateY(3px); } }
+@keyframes cabin-door-fade {
+  0% { opacity: 0; }
+  32% { opacity: 1; }
+  58% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (max-width: 640px) {
+  .comic-bubble { width: 94vw; padding: 1rem 1.05rem 1.15rem; }
+  .comic-text { min-height: 2.8rem; font-size: 14px; }
+  .comic-speaker-tag { top: -14px; font-size: 9px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hd2d-ambient-orbs,
   .pixel-character-grid,

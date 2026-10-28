@@ -256,10 +256,14 @@ export function drawHandcraftedTree(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
-  variant: 'forest' | 'meadow' | 'pine'
+  variant: 'forest' | 'meadow' | 'pine',
+  elapsed = 0,
+  reducedMotion = false
 ): void {
   const x = Math.round(cx);
   const y = Math.round(cy);
+  // Vaivén de copa de 1 px: da vida al dosel sin romper la lectura pixel-art.
+  const canopySway = reducedMotion ? 0 : Math.round(Math.sin(elapsed * 1.15 + cx * 0.045) * 1.25);
 
   ctx.save();
   ctx.translate(x, y);
@@ -296,6 +300,10 @@ export function drawHandcraftedTree(
     ctx.fillStyle = '#100703';
     ctx.fillRect(-8, 1, 3, 3);
     ctx.fillRect(5, 1, 3, 3);
+
+    // La copa entera mece sobre el tronco fijo.
+    ctx.save();
+    ctx.translate(canopySway, 0);
 
     // Tier 1: Faldón inferior de agujas (y = -26 a -10)
     ctx.fillStyle = pOutline;
@@ -385,6 +393,8 @@ export function drawHandcraftedTree(
     ctx.fillStyle = '#b45309';
     ctx.fillRect(-11, -17, 1, 2);
     ctx.fillRect(12, -16, 1, 2);
+
+    ctx.restore();
   } else {
     // ----------------------------------------------------
     // ROBLE DE BOSQUE / ÁRBOL DE PRADERA GBA:
@@ -428,6 +438,10 @@ export function drawHandcraftedTree(
     ctx.fillRect(-1, -7, 3, 3);
     ctx.fillStyle = '#9e5a2c';
     ctx.fillRect(-1, -8, 3, 1);
+
+    // La corona de hojas se mece levemente sobre el tronco.
+    ctx.save();
+    ctx.translate(canopySway, 0);
 
     // Helper interno para dibujar un lóbulo de follaje redondeado en estilo pixel art GBA
     const drawFoliageLobe = (
@@ -502,6 +516,8 @@ export function drawHandcraftedTree(
     ctx.fillRect(-17, -43, 1, 1);
     ctx.fillRect(-7, -54, 1, 1);
     ctx.fillRect(10, -45, 1, 1);
+
+    ctx.restore();
   }
 
   ctx.restore();
@@ -1196,6 +1212,7 @@ export function drawPixelAvatar4Dir(
     reducedMotion?: boolean;
     equippedCosmetic?: string | null;
     lanternActive?: boolean;
+    lanternRadiusScale?: number;
     interactAnim?: number;
     appearance?: AvatarAppearance;
   }
@@ -1244,14 +1261,15 @@ export function drawPixelAvatar4Dir(
 
   // Halo de la Lámpara de Fósforo si está encendida
   if (opts?.lanternActive) {
+    const lanternScale = opts.lanternRadiusScale ?? 1;
     ctx.save();
     ctx.fillStyle = 'rgba(250, 204, 21, 0.2)';
     ctx.beginPath();
-    ctx.arc(0, -14, 48, 0, Math.PI * 2);
+    ctx.arc(0, -14, 48 * lanternScale, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = 'rgba(254, 240, 138, 0.28)';
     ctx.beginPath();
-    ctx.arc(0, -14, 26, 0, Math.PI * 2);
+    ctx.arc(0, -14, 26 * lanternScale, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -2710,13 +2728,50 @@ function drawGbcWalkableSurfaceTile(
       ctx.fillStyle = '#a3e635';
       ctx.fillRect(wx + 20, wy + 12, 1, 4);
     } else if (h % 17 === 0) {
-      // Charco mareal cristalino
+      // Charco mareal cristalino con borde orgánico y reflejo del cielo
+      const px = wx + 7;
+      const py = wy + 9;
+      ctx.fillStyle = '#0f4a5c';
+      ctx.fillRect(px + 2, py, 11, 1);
+      ctx.fillRect(px, py + 2, 15, 7);
+      ctx.fillRect(px + 2, py + 9, 11, 1);
       ctx.fillStyle = '#1e627d';
-      ctx.fillRect(wx + 8, wy + 10, 15, 11);
+      ctx.fillRect(px + 2, py + 1, 11, 8);
       ctx.fillStyle = '#38bdf8';
-      ctx.fillRect(wx + 9, wy + 11, 13, 9);
-      ctx.fillStyle = '#bae6fd';
-      ctx.fillRect(wx + 11, wy + 13, 6, 3);
+      ctx.fillRect(px + 2, py + 2, 11, 6);
+      ctx.fillStyle = '#7dd3fc';
+      ctx.fillRect(px + 3, py + 2, 7, 2);
+      ctx.fillStyle = '#e0f2fe';
+      ctx.fillRect(px + 4, py + 3, 4, 1);
+      ctx.fillRect(px + 9, py + 5, 2, 1);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.fillRect(px + 5, py + 7, 3, 1);
+    }
+    if (h % 19 === 4) {
+      // Estrella de mar coral sobre la arena seca
+      const sx = wx + 6 + ((h >> 5) % 18);
+      const sy = wy + 6 + ((h >> 9) % 18);
+      ctx.fillStyle = '#9f1239';
+      ctx.fillRect(sx, sy - 1, 2, 2);
+      ctx.fillRect(sx - 1, sy, 4, 1);
+      ctx.fillRect(sx, sy + 1, 2, 2);
+      ctx.fillStyle = '#fb7185';
+      ctx.fillRect(sx, sy, 1, 1);
+      ctx.fillRect(sx + 1, sy - 1, 1, 1);
+      ctx.fillRect(sx - 1, sy, 1, 1);
+      ctx.fillStyle = '#fecdd3';
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+    if (h % 23 === 6) {
+      // Astilla de madera arrastrada por la marea
+      const dx = wx + 4 + ((h >> 7) % 18);
+      const dy = wy + 12 + ((h >> 12) % 12);
+      ctx.fillStyle = '#6b4a24';
+      ctx.fillRect(dx, dy + 1, 6, 1);
+      ctx.fillStyle = '#a87944';
+      ctx.fillRect(dx + 1, dy, 5, 1);
+      ctx.fillStyle = '#d8be88';
+      ctx.fillRect(dx + 2, dy, 2, 1);
     }
     return;
   }
@@ -2763,6 +2818,19 @@ function drawGbcWalkableSurfaceTile(
     drawPaver(wx + 17, wy + 1, 14, 14, h >> 2);
     drawPaver(wx + 1, wy + 17, 14, 14, h >> 4);
     drawPaver(wx + 17, wy + 17, 14, 14, h >> 6);
+
+    // Astillas de piedra y desgaste en las juntas
+    if (h % 6 === 1) {
+      ctx.fillStyle = isRuins ? '#94a3b8' : '#e8dbae';
+      ctx.fillRect(wx + 14, wy + 15, 2, 1);
+      ctx.fillStyle = stoneShadow;
+      ctx.fillRect(wx + 16, wy + 15, 1, 1);
+    }
+    if (h % 9 === 3) {
+      ctx.fillStyle = stoneShadow;
+      ctx.fillRect(wx + 15, wy + 4, 1, 3);
+      ctx.fillRect(wx + 16, wy + 7, 1, 2);
+    }
 
     // Detalles entre juntas: musgo vivo en aldea o circuito de pulso en ruinas
     if (isRuins) {
@@ -2902,6 +2970,40 @@ function drawGbcWalkableSurfaceTile(
       // Centro
       ctx.fillStyle = centerCol;
       ctx.fillRect(fx + 1, fy + 1, 1, 1);
+    }
+
+    // 4B. Tréboles, hojas caídas y rocío: riqueza de suelo en toda la isla
+    if ((h & 15) === 5) {
+      const clx = wx + 6 + ((h >> 6) % 18);
+      const cly = wy + 6 + ((h >> 10) % 18);
+      ctx.fillStyle = tuftShadow;
+      ctx.fillRect(clx - 1, cly + 3, 4, 1);
+      ctx.fillStyle = isForest ? '#3fae6c' : '#4f9e3f';
+      ctx.fillRect(clx, cly, 1, 2);
+      ctx.fillRect(clx - 2, cly + 1, 2, 2);
+      ctx.fillRect(clx + 1, cly + 1, 2, 2);
+      ctx.fillStyle = tuftTip;
+      ctx.fillRect(clx - 2, cly + 1, 1, 1);
+      ctx.fillRect(clx + 2, cly + 1, 1, 1);
+      ctx.fillRect(clx, cly, 1, 1);
+    }
+    if (!isForest && (h & 31) === 9) {
+      const lx = wx + 5 + ((h >> 7) % 20);
+      const ly = wy + 8 + ((h >> 13) % 16);
+      ctx.fillStyle = '#7c4a16';
+      ctx.fillRect(lx, ly + 1, 5, 1);
+      ctx.fillStyle = '#c98a25';
+      ctx.fillRect(lx + 1, ly, 4, 1);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(lx + 2, ly, 2, 1);
+    }
+    if ((h & 63) === 21) {
+      const dx = wx + 6 + ((h >> 9) % 20);
+      const dy = wy + 7 + ((h >> 15) % 18);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.fillRect(dx, dy, 1, 1);
+      ctx.fillStyle = 'rgba(224, 242, 254, 0.32)';
+      ctx.fillRect(dx + 1, dy + 1, 1, 1);
     }
 
     // 5. Trazas arqueológicas enterradas bajo el musgo (Bosque de Circuitos)
@@ -3055,6 +3157,19 @@ function drawGbcWalkableSurfaceTile(
   ctx.fillStyle = '#606c7c';
   ctx.fillRect(wx + 2, wy + 13, 12, 2);
   ctx.fillRect(wx + 18, wy + 29, 12, 2);
+
+  // Fisuras finas y liquen en las terrazas de piedra
+  if (h % 7 === 2) {
+    ctx.fillStyle = '#3f4a58';
+    ctx.fillRect(wx + 8 + ((h >> 5) % 14), wy + 6 + ((h >> 9) % 14), 1, 4);
+    ctx.fillRect(wx + 9 + ((h >> 5) % 14), wy + 10 + ((h >> 9) % 14), 3, 1);
+  }
+  if (h % 11 === 4) {
+    ctx.fillStyle = '#5f7a4a';
+    ctx.fillRect(wx + 5 + ((h >> 7) % 20), wy + 19 + ((h >> 12) % 8), 3, 1);
+    ctx.fillStyle = '#8aa86a';
+    ctx.fillRect(wx + 6 + ((h >> 7) % 20), wy + 19 + ((h >> 12) % 8), 1, 1);
+  }
 }
 
 /**
@@ -3106,6 +3221,29 @@ function drawHandcraftedPathsAndStairs(
         ctx.fillRect(x + 2, y + 6, segmentWidth - 4, width - 12);
       } else {
         ctx.fillRect(x + 6, y + 2, width - 12, segmentHeight - 4);
+      }
+
+      // 3B. Textura de tierra: vetas, motas y doble surco de carreta
+      if (horizontal) {
+        ctx.fillStyle = 'rgba(139, 104, 55, 0.32)';
+        ctx.fillRect(x + 10, y + 10, segmentWidth - 20, 1);
+        ctx.fillRect(x + 10, y + width - 11, segmentWidth - 20, 1);
+        for (let mx = x + 9; mx < x + segmentWidth - 9; mx += 13) {
+          const seed = Math.abs(Math.sin(mx * 0.31 + y * 0.07));
+          if (seed < 0.34) continue;
+          ctx.fillStyle = seed > 0.66 ? '#b08a4e' : '#d9bb80';
+          ctx.fillRect(mx + Math.round(seed * 3), y + 8 + Math.round(seed * 10), 2, 1);
+        }
+      } else {
+        ctx.fillStyle = 'rgba(139, 104, 55, 0.32)';
+        ctx.fillRect(x + 10, y + 10, 1, segmentHeight - 20);
+        ctx.fillRect(x + width - 11, y + 10, 1, segmentHeight - 20);
+        for (let my = y + 9; my < y + segmentHeight - 9; my += 13) {
+          const seed = Math.abs(Math.sin(my * 0.31 + x * 0.07));
+          if (seed < 0.34) continue;
+          ctx.fillStyle = seed > 0.66 ? '#b08a4e' : '#d9bb80';
+          ctx.fillRect(x + 8 + Math.round(seed * 10), my + Math.round(seed * 3), 1, 2);
+        }
       }
 
       // Borde tallado y sombra de pisada para separar el camino del césped con píxeles nítidos.
@@ -4689,6 +4827,158 @@ export interface IslandRenderFrameParams {
   scannerPulse?: { active: boolean; elapsed: number };
 }
 
+/**
+ * Sombra suave de nubes a la deriva sobre el terreno: aporta profundidad y
+ * movimiento continuo a toda la isla sin tocar la lógica de colisiones.
+ */
+function drawDriftingCloudShadows(
+  ctx: CanvasRenderingContext2D,
+  elapsed: number,
+  reducedMotion: boolean,
+  camX: number,
+  camY: number,
+  vw: number,
+  vh: number
+): void {
+  const clouds = [
+    { x: 760, y: 1900, r: 230, speed: 0.05, phase: 0.4 },
+    { x: 1980, y: 1260, r: 280, speed: 0.037, phase: 2.1 },
+    { x: 2940, y: 1780, r: 210, speed: 0.06, phase: 4.2 },
+    { x: 1320, y: 760, r: 250, speed: 0.043, phase: 1.3 },
+    { x: 2520, y: 480, r: 190, speed: 0.052, phase: 5.1 },
+  ];
+
+  ctx.save();
+  for (let i = 0; i < clouds.length; i++) {
+    const c = clouds[i];
+    const driftX = reducedMotion ? 0 : Math.sin(elapsed * c.speed + c.phase) * 150;
+    const driftY = reducedMotion ? 0 : Math.cos(elapsed * c.speed * 0.7 + c.phase) * 46;
+    const cx = c.x + driftX;
+    const cy = c.y + driftY;
+    if (!isWorldBoxVisible(cx - c.r, cy - c.r * 0.7, c.r * 2, c.r * 1.4, camX, camY, vw, vh, 30)) {
+      continue;
+    }
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1, 0.52);
+    const shade = ctx.createRadialGradient(0, 0, c.r * 0.12, 0, 0, c.r);
+    shade.addColorStop(0, 'rgba(4, 16, 22, 0.105)');
+    shade.addColorStop(0.55, 'rgba(4, 16, 22, 0.075)');
+    shade.addColorStop(1, 'rgba(4, 16, 22, 0)');
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.arc(0, 0, c.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Segundo lóbulo desplazado para que la sombra no parezca un óvalo perfecto.
+    ctx.translate(c.r * 0.42, c.r * 0.1);
+    const lobe = ctx.createRadialGradient(0, 0, c.r * 0.08, 0, 0, c.r * 0.62);
+    lobe.addColorStop(0, 'rgba(4, 16, 22, 0.075)');
+    lobe.addColorStop(1, 'rgba(4, 16, 22, 0)');
+    ctx.fillStyle = lobe;
+    ctx.beginPath();
+    ctx.arc(0, 0, c.r * 0.62, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function getIslandLandRect(
+  x: number,
+  y: number,
+  southShortcutActive: boolean,
+  glitchTrailCleared: boolean
+): WalkableRect | null {
+  for (const r of ISLAND_WALKABLE_RECTS) {
+    if (r.requiresCondition === 'south-shortcut' && !southShortcutActive) continue;
+    if (r.requiresCondition === 'garganta-bridge' && !glitchTrailCleared) continue;
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return r;
+  }
+  return null;
+}
+
+/**
+ * Motas de polen, esporas y luciérnagas digitales: vida ambiental sutil que
+ * recorre todos los sectores de la isla por encima del terreno caminable.
+ */
+function drawAmbientIslandLife(
+  ctx: CanvasRenderingContext2D,
+  elapsed: number,
+  reducedMotion: boolean,
+  camX: number,
+  camY: number,
+  vw: number,
+  vh: number,
+  ambientBits: IslandAmbientBit[],
+  digitalCritters: IslandDigitalCritter[],
+  southShortcutActive: boolean,
+  glitchTrailCleared: boolean
+): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  for (const bit of ambientBits) {
+    // Densidad baja: unas pocas motas visibles a la vez, como polen de GBA.
+    if (((bit.x * 13 + bit.y * 7) & 3) !== 0) continue;
+    const driftX = reducedMotion ? 0 : Math.cos(elapsed * 0.55 + bit.phase * 0.7) * 5;
+    const driftY = reducedMotion ? 0 : Math.sin(elapsed * 0.85 + bit.phase) * 6;
+    const x = Math.round(bit.x + driftX);
+    const y = Math.round(bit.y + driftY);
+    if (x < camX - 10 || x > camX + vw + 10 || y < camY - 10 || y > camY + vh + 10) continue;
+    const land = getIslandLandRect(x, y, southShortcutActive, glitchTrailCleared);
+    if (!land) continue;
+    // Polen y esporas solo sobre suelo natural; evita "píxeles" sueltos en plazas y piedra.
+    if (
+      land.surface !== 'grass' &&
+      land.surface !== 'secret-grass' &&
+      land.surface !== 'circuit' &&
+      land.surface !== 'sand'
+    ) {
+      continue;
+    }
+
+    const pulse = reducedMotion ? 0.42 : 0.3 + Math.sin(elapsed * 2.1 + bit.phase) * 0.26;
+    ctx.globalAlpha = Math.max(0.02, pulse * 0.09);
+    ctx.fillStyle = bit.color;
+    ctx.fillRect(x - 1, y - 1, 3, 3);
+    ctx.globalAlpha = Math.max(0.1, pulse * 0.4);
+    ctx.fillRect(x, y, 2, 1);
+    ctx.globalAlpha = Math.min(0.85, pulse * 0.95);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  for (const critter of digitalCritters) {
+    const x = Math.round(critter.homeX + Math.sin(elapsed * 0.7 + critter.phase) * 26);
+    const y = Math.round(critter.homeY + Math.cos(elapsed * 0.9 + critter.phase) * 14);
+    if (x < camX - 12 || x > camX + vw + 12 || y < camY - 12 || y > camY + vh + 12) continue;
+    const land = getIslandLandRect(x, y, southShortcutActive, glitchTrailCleared);
+    if (
+      !land ||
+      (land.surface !== 'grass' &&
+        land.surface !== 'secret-grass' &&
+        land.surface !== 'circuit')
+    ) {
+      continue;
+    }
+
+    const wing = reducedMotion ? 2 : Math.sin(elapsed * 16 + critter.phase) > 0 ? 3 : 1;
+    ctx.globalAlpha = 0.24;
+    ctx.fillStyle = critter.color;
+    ctx.fillRect(x - 3, y - 1, 2, wing);
+    ctx.fillRect(x + 2, y - 1, 2, wing);
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(x - 1, y - 1, 3, 3);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#f0fdfa';
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  ctx.restore();
+}
+
 export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
   const {
     ctx,
@@ -4697,6 +4987,7 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     camera,
     elapsed,
     reducedMotion,
+    ambientBits,
     digitalCritters,
     pickupBursts,
     player,
@@ -4781,6 +5072,19 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
       if (th % 5 === 0) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(waveX2 + 4, waveY2 - 1, 2, 1);
+      }
+
+      // Destellos de sol sobre la superficie: rompen la repetición del oleaje.
+      if (th % 7 === 0) {
+        const twinkle = reducedMotion
+          ? 0.35
+          : 0.18 + Math.max(0, Math.sin(elapsed * 1.7 + (th % 29) * 0.9)) * 0.5;
+        ctx.fillStyle = `rgba(207, 250, 254, ${twinkle.toFixed(3)})`;
+        ctx.fillRect(wx + 5 + ((th >> 6) % 20), wy + 13 + ((th >> 12) % 15), 2, 1);
+        if (th % 21 === 0) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${(twinkle * 0.8).toFixed(3)})`;
+          ctx.fillRect(wx + 8 + ((th >> 9) % 14), wy + 18 + ((th >> 15) % 9), 4, 1);
+        }
       }
     }
   }
@@ -4914,6 +5218,10 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
 
   // 3B. SENDEROS ORGÁNICOS Y ESCALINATAS TALLADAS ENTRE DESNIVELES
   drawHandcraftedPathsAndStairs(ctx, camX, camY, vw, vh);
+
+  // 3C. SOMBRAS DE NUBES A LA DERIVA SOBRE TODA LA ISLA (profundidad atmosférica)
+  drawDriftingCloudShadows(ctx, elapsed, reducedMotion, camX, camY, vw, vh);
+
   drawIslandWoodRailSystem(
     ctx,
     camX,
@@ -6219,7 +6527,15 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     if (isWorldBoxVisible(tree.x - 32, tree.y - 58, 64, 72, camX, camY, vw, vh)) {
       ySortedDrawables.push({
         sortY: tree.y,
-        draw: () => drawHandcraftedTree(ctx, tree.x, tree.y, tree.variant),
+        draw: () =>
+          drawHandcraftedTree(
+            ctx,
+            tree.x,
+            tree.y,
+            tree.variant,
+            elapsed,
+            reducedMotion
+          ),
       });
     }
   }
@@ -6441,6 +6757,11 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
             reducedMotion,
             equippedCosmetic: progressState.rpg.equippedCosmetic,
             lanternActive: progressState.rpg.lanternActive,
+            lanternRadiusScale: progressState.rpg.powersState?.upgradesPurchased.includes(
+              'upg-lantern-radius-1'
+            )
+              ? 1.4
+              : 1,
             interactAnim: player.interactAnim,
             appearance,
           }
@@ -6542,10 +6863,30 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     ctx.restore();
   }
 
-  // 8. ONDA DE PULSO DEL SONAR DE FRECUENCIAS TTL [R]
+  // 8. VIDA AMBIENTAL: polen, esporas y luciérnagas digitales sobre el terreno
+  drawAmbientIslandLife(
+    ctx,
+    elapsed,
+    reducedMotion,
+    camX,
+    camY,
+    vw,
+    vh,
+    ambientBits,
+    digitalCritters,
+    southShortcutActive,
+    glitchTrailCleared
+  );
+
+  // 9. ONDA DE PULSO DEL SONAR DE FRECUENCIAS TTL [R]
   if (scannerPulse && scannerPulse.active) {
+    const scannerRangeScale = progressState.rpg.powersState?.upgradesPurchased.includes(
+      'upg-scanner-range-1'
+    )
+      ? 1.6
+      : 1;
     const pRatio = Math.min(1, scannerPulse.elapsed / 1.45);
-    const radius = Math.round(24 + pRatio * 480);
+    const radius = Math.round((24 + pRatio * 480) * scannerRangeScale);
     ctx.save();
     ctx.strokeStyle = '#00f3ff';
     ctx.lineWidth = 3;
@@ -6636,7 +6977,7 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     ctx.fillRect(Math.round(pb.x - 2), Math.round(pb.y - 2), 6, 6);
   }
 
-  // 9. ILUMINACIÓN ATMOSFÉRICA HD-2D + RGB PLAYGROUNDS (halos aditivos limpios y semánticos)
+  // 10. ILUMINACIÓN ATMOSFÉRICA HD-2D + RGB PLAYGROUNDS (halos aditivos limpios y semánticos)
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   const lightPools: { x: number; y: number; r: number; rgba: string }[] = [
@@ -6697,6 +7038,15 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     ctx.fillStyle = ISLAND_ZONES[activeZoneId].ambientTint;
     ctx.fillRect(0, 0, vw, vh);
   }
+
+  // Grado de color global: luz cálida desde el norte y sombras marinas al sur.
+  const grade = ctx.createLinearGradient(0, 0, 0, vh);
+  grade.addColorStop(0, 'rgba(255, 221, 166, 0.055)');
+  grade.addColorStop(0.42, 'rgba(255, 236, 196, 0.012)');
+  grade.addColorStop(0.72, 'rgba(18, 40, 66, 0)');
+  grade.addColorStop(1, 'rgba(10, 24, 48, 0.085)');
+  ctx.fillStyle = grade;
+  ctx.fillRect(0, 0, vw, vh);
 
   // Viñeta cinematográfica sutil estilo Octopath / HD-2D sin oscurecer el centro jugable
   const vig = ctx.createRadialGradient(

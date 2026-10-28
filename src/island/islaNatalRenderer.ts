@@ -35,6 +35,7 @@ import {
   ISLA_NATAL_SHELLS,
   ISLA_NATAL_SIGNS,
   ISLA_NATAL_SOLIDS,
+  ISLA_NATAL_TRAVELER_SITE,
   ISLA_NATAL_TREES,
   ISLA_NATAL_TUFTS,
   ISLA_NATAL_WALK_RECTS,
@@ -101,6 +102,11 @@ export interface IslaNatalRenderParams {
   particles: IslaNatalParticle[];
   prompt: IslaNatalPromptSpec | null;
   shockwaves: { x: number; y: number; t: number; life: number }[];
+  /** Escena del viajero del futuro: fase y segundos transcurridos dentro de ella. */
+  travelerEvent?: {
+    phase: 'storm' | 'arrival' | 'descend' | 'talk' | 'board' | 'departure';
+    t: number;
+  } | null;
 }
 
 const CELL = 32;
@@ -113,6 +119,7 @@ const NET_POS = { x: 668, y: 958 };
 const SHELLS_POI_POS = { x: 946, y: 974 };
 const MAILBOX_POS = { x: 574, y: 792 };
 const CRATE_POS = { x: 596, y: 704 };
+const MIRADOR_POS = { x: 452, y: 306 };
 
 /** Carteles de zona: mismo formato pequeño que los del Origen. */
 
@@ -2551,6 +2558,101 @@ function drawCrate(
   drawRpgTreasureChest(ctx, CRATE_POS.x, CRATE_POS.y, false, '#d97706', elapsed, reducedMotion);
 }
 
+/**
+ * Mirador del Alto de las Rocas: tarima de tablones, baranda y catalejo de latón
+ * apuntando hacia adelante, sobre el horizonte donde duerme la Isla del Origen.
+ */
+function drawAltoMirador(
+  ctx: CanvasRenderingContext2D,
+  elapsed: number,
+  reducedMotion: boolean
+): void {
+  const { x, y } = MIRADOR_POS;
+  const glint = reducedMotion ? 0.55 : 0.35 + (Math.sin(elapsed * 1.7) + 1) * 0.18;
+
+  // Sombra sobre la roca.
+  ctx.fillStyle = 'rgba(14, 20, 26, 0.34)';
+  ctx.fillRect(x - 62, y - 2, 124, 9);
+
+  // Tarima de tablones.
+  ctx.fillStyle = '#3a2413';
+  ctx.fillRect(x - 62, y - 8, 124, 10);
+  ctx.fillStyle = '#7a4f2a';
+  ctx.fillRect(x - 62, y - 10, 124, 5);
+  ctx.fillStyle = '#9a6a3c';
+  ctx.fillRect(x - 62, y - 10, 124, 1);
+  for (let i = -56; i <= 56; i += 12) {
+    ctx.fillStyle = 'rgba(36, 20, 8, 0.45)';
+    ctx.fillRect(x + i, y - 5, 1, 7);
+  }
+
+  // Postes y doble baranda de madera.
+  for (const px of [x - 58, x - 4, x + 50]) {
+    ctx.fillStyle = '#4a2c16';
+    ctx.fillRect(px, y - 33, 6, 25);
+    ctx.fillStyle = '#8a5a30';
+    ctx.fillRect(px, y - 33, 2, 25);
+    ctx.fillStyle = '#c9a06a';
+    ctx.fillRect(px, y - 34, 6, 2);
+  }
+  ctx.fillStyle = '#5c3a1f';
+  ctx.fillRect(x - 60, y - 31, 120, 4);
+  ctx.fillRect(x - 60, y - 18, 120, 3);
+  ctx.fillStyle = '#a8743f';
+  ctx.fillRect(x - 60, y - 32, 120, 2);
+  ctx.fillStyle = `rgba(255, 214, 150, ${glint.toFixed(2)})`;
+  ctx.fillRect(x - 60, y - 32, 120, 1);
+
+  // Catalejo de latón sobre trípode, apuntando al horizonte (arriba).
+  const tx = x - 8;
+  const ty = y - 24;
+  ctx.fillStyle = '#1c120a';
+  ctx.beginPath();
+  ctx.moveTo(tx, ty + 1);
+  ctx.lineTo(tx - 16, y + 2);
+  ctx.lineTo(tx - 11, y + 2);
+  ctx.lineTo(tx + 1, ty + 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(tx, ty + 1);
+  ctx.lineTo(tx + 17, y + 2);
+  ctx.lineTo(tx + 12, y + 2);
+  ctx.lineTo(tx + 1, ty + 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#3a2616';
+  ctx.fillRect(tx - 4, ty, 9, 4);
+
+  // Tubo largo inclinado hacia adelante.
+  ctx.save();
+  ctx.translate(tx, ty - 2);
+  ctx.rotate(-1.08);
+  ctx.fillStyle = '#5b3a16';
+  ctx.fillRect(-12, -4, 58, 9);
+  ctx.fillStyle = '#a97a35';
+  ctx.fillRect(-12, -4, 58, 4);
+  ctx.fillStyle = '#e0b766';
+  ctx.fillRect(-12, -4, 58, 1);
+  // Refuerzos del tubo.
+  ctx.fillStyle = '#3d260f';
+  ctx.fillRect(-8, -5, 4, 11);
+  ctx.fillRect(28, -5, 4, 11);
+  // Campana del objetivo.
+  ctx.fillStyle = '#3d260f';
+  ctx.fillRect(42, -6, 9, 13);
+  ctx.fillStyle = '#d9c082';
+  ctx.fillRect(45, -4, 5, 9);
+  ctx.fillStyle = `rgba(186, 244, 255, ${glint.toFixed(2)})`;
+  ctx.fillRect(47, -2, 3, 6);
+  // Ocular y contrapeso.
+  ctx.fillStyle = '#6b471f';
+  ctx.fillRect(-17, -5, 6, 11);
+  ctx.fillStyle = '#2a1a0b';
+  ctx.fillRect(-20, -3, 4, 7);
+  ctx.restore();
+}
+
 function drawPaddleItem(ctx: CanvasRenderingContext2D, elapsed: number, reducedMotion: boolean): void {
   const x = CABINET_POS.x + 60;
   const y = CABINET_POS.y + 76;
@@ -2891,6 +2993,487 @@ function drawPromptBadge(ctx: CanvasRenderingContext2D, prompt: IslaNatalPromptS
 }
 
 /* ------------------------------------------------------------------ */
+/* EL VIAJERO Y SU MÁQUINA DEL TIEMPO                                  */
+/* ------------------------------------------------------------------ */
+
+/** Geometría de la escena, derivada del punto de aterrizaje. */
+const SHIP_HALF_W = 54;
+const SHIP_LEG = 16;
+const SHIP_HULL_H = 34;
+const RAMP_LEN = 76;
+const TALK_OFFSET = 104;
+const DOOR_OFFSET = 46;
+const DOOR_HEIGHT = 34;
+
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+const smoothstep = (v: number): number => {
+  const p = clamp01(v);
+  return p * p * (3 - 2 * p);
+};
+
+/** Rastro chamuscado y polvo asentado en el punto de aterrizaje. */
+function drawLandingScorch(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  elapsed: number
+): void {
+  ctx.save();
+  ctx.fillStyle = 'rgba(28, 26, 18, 0.22)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 3, 66, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(46, 38, 22, 0.2)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 3, 42, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Trizas radiales en la hierba.
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + hash2(i, 41) * 0.25;
+    const r = 46 + hash2(i, 9) * 26;
+    const len = 4 + hash2(i, 5) * 8;
+    ctx.strokeStyle = `rgba(34, 30, 20, ${(0.18 + hash2(i, 3) * 0.16).toFixed(3)})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.26);
+    ctx.lineTo(x + Math.cos(a) * (r + len), y + Math.sin(a) * (r + len) * 0.26);
+    ctx.stroke();
+  }
+
+  // Brasas que aún respiran.
+  for (let i = 0; i < 4; i++) {
+    const pulse = 0.15 + 0.5 * Math.abs(Math.sin(elapsed * 1.6 + i * 1.7));
+    ctx.fillStyle = `rgba(103, 232, 249, ${(pulse * 0.4).toFixed(3)})`;
+    ctx.fillRect(
+      Math.round(x - 30 + hash2(i, 21) * 60),
+      Math.round(y - 1 + hash2(i, 13) * 3),
+      2,
+      2
+    );
+  }
+  ctx.restore();
+}
+
+/**
+ * Nave del viajero: casco metálico con remaches y paneles, cúpula de cristal,
+ * patas hidráulicas, rampa de descenso y luces de aterrizaje.
+ */
+function drawTravelerShip(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+  lift: number,
+  elapsed: number,
+  reducedMotion: boolean,
+  landed: boolean
+): void {
+  const bob = !landed && !reducedMotion ? Math.sin(elapsed * 1.7) * 1.2 : 0;
+  const cy = groundY - lift + bob;
+  const hullBottom = cy - SHIP_LEG;
+  const hullTop = hullBottom - SHIP_HULL_H;
+  const left = x - SHIP_HALF_W;
+  const right = x + SHIP_HALF_W;
+  const shrink = clamp01(1 - lift / 300);
+  const blink = reducedMotion ? 0.6 : 0.35 + Math.abs(Math.sin(elapsed * 3.4)) * 0.65;
+
+  ctx.save();
+
+  // Haz de aterrizaje: una columna de luz suave mientras baja.
+  if (lift > 6) {
+    const beam = ctx.createLinearGradient(0, hullBottom, 0, groundY);
+    beam.addColorStop(0, 'rgba(150, 240, 255, 0.26)');
+    beam.addColorStop(1, 'rgba(150, 240, 255, 0)');
+    ctx.fillStyle = beam;
+    ctx.fillRect(x - 34, hullBottom, 68, groundY - hullBottom);
+  }
+
+  // Sombra proyectada, se achica a medida que sube.
+  ctx.fillStyle = `rgba(8, 20, 30, ${(0.3 * shrink).toFixed(3)})`;
+  ctx.beginPath();
+  ctx.ellipse(x, groundY + 3, 62 * (0.55 + 0.45 * shrink), 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Patas hidráulicas.
+  for (const legX of [x - 38, x + 30]) {
+    ctx.fillStyle = '#4b6172';
+    ctx.fillRect(Math.round(legX), hullBottom, 5, SHIP_LEG);
+    ctx.fillStyle = '#7e97a6';
+    ctx.fillRect(Math.round(legX + 1), hullBottom, 1, SHIP_LEG - 3);
+    ctx.fillStyle = '#2b3b48';
+    ctx.fillRect(Math.round(legX - 4), groundY - 2, 13, 4);
+    ctx.fillStyle = '#93a9b6';
+    ctx.fillRect(Math.round(legX - 4), groundY - 2, 13, 1);
+  }
+
+  // Rampa de descenso hacia el oeste, sólo con la nave apoyada.
+  if (landed) {
+    const doorX = x - DOOR_OFFSET;
+    const doorY = hullBottom - 4;
+    const footX = doorX - RAMP_LEN;
+    ctx.fillStyle = '#53697a';
+    ctx.beginPath();
+    ctx.moveTo(doorX - 2, doorY);
+    ctx.lineTo(doorX + 14, doorY);
+    ctx.lineTo(footX + 16, groundY + 1);
+    ctx.lineTo(footX, groundY + 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#7d95a4';
+    ctx.beginPath();
+    ctx.moveTo(doorX - 2, doorY);
+    ctx.lineTo(doorX + 2, doorY);
+    ctx.lineTo(footX + 2, groundY + 1);
+    ctx.lineTo(footX, groundY + 1);
+    ctx.closePath();
+    ctx.fill();
+    // Travesaños y luces de borde.
+    for (let i = 1; i < 6; i++) {
+      const p = i / 6;
+      const px = doorX + (footX - doorX) * p;
+      const py = doorY + (groundY - doorY) * p;
+      ctx.fillStyle = 'rgba(24, 34, 42, 0.5)';
+      ctx.fillRect(Math.round(px), Math.round(py), 14, 1);
+    }
+    ctx.fillStyle = `rgba(150, 240, 255, ${(0.4 + blink * 0.3).toFixed(3)})`;
+    ctx.fillRect(Math.round(footX), Math.round(groundY - 1), 2, 2);
+    ctx.fillRect(Math.round(footX + 13), Math.round(groundY - 1), 2, 2);
+  }
+
+  // Casco principal con degradado metálico.
+  const hull = ctx.createLinearGradient(0, hullTop, 0, hullBottom);
+  hull.addColorStop(0, '#54707f');
+  hull.addColorStop(0.28, '#334c5c');
+  hull.addColorStop(0.72, '#223542');
+  hull.addColorStop(1, '#121e27');
+  ctx.fillStyle = hull;
+  ctx.fillRect(left, hullTop, SHIP_HALF_W * 2, SHIP_HULL_H);
+
+  // Borde superior iluminado y panza en sombra.
+  ctx.fillStyle = 'rgba(196, 228, 238, 0.5)';
+  ctx.fillRect(left + 3, hullTop, SHIP_HALF_W * 2 - 6, 1);
+  ctx.fillStyle = 'rgba(178, 208, 220, 0.22)';
+  ctx.fillRect(left + 3, hullTop + 1, SHIP_HALF_W * 2 - 6, 3);
+  ctx.fillStyle = 'rgba(8, 14, 18, 0.6)';
+  ctx.fillRect(left, hullBottom - 5, SHIP_HALF_W * 2, 5);
+
+  // Paneles verticales y remaches.
+  for (let px = left + 12; px < right - 6; px += 18) {
+    ctx.fillStyle = 'rgba(12, 20, 26, 0.45)';
+    ctx.fillRect(px, hullTop + 4, 1, SHIP_HULL_H - 8);
+    ctx.fillStyle = 'rgba(150, 186, 200, 0.14)';
+    ctx.fillRect(px + 1, hullTop + 4, 1, SHIP_HULL_H - 8);
+  }
+  ctx.fillStyle = 'rgba(168, 200, 212, 0.4)';
+  for (let px = left + 8; px < right - 4; px += 18) {
+    for (let py = hullTop + 8; py < hullBottom - 8; py += 9) {
+      ctx.fillRect(px, py, 1, 1);
+    }
+  }
+
+  // Franjas de advertencia en los costados.
+  for (const sx of [left + 2, right - 10]) {
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i % 2 === 0 ? '#c9a227' : '#1b262e';
+      ctx.fillRect(sx + i * 2, hullBottom - 12, 2, 6);
+    }
+  }
+
+  // Compuerta lateral izquierda.
+  const doorX = x - DOOR_OFFSET;
+  ctx.fillStyle = '#0d161d';
+  ctx.fillRect(doorX - 2, hullBottom - DOOR_HEIGHT, 15, DOOR_HEIGHT - 4);
+  ctx.fillStyle = '#3f5a6b';
+  ctx.fillRect(doorX + 13, hullBottom - DOOR_HEIGHT, 2, DOOR_HEIGHT - 4);
+  ctx.fillStyle = 'rgba(103, 232, 249, 0.55)';
+  ctx.fillRect(doorX - 1, hullBottom - DOOR_HEIGHT + 2, 13, 1);
+
+  // Ventanillas.
+  for (const wx of [x + 8, x + 26]) {
+    ctx.fillStyle = '#0e1a22';
+    ctx.fillRect(wx - 2, hullTop + 10, 12, 10);
+    ctx.fillStyle = '#5fd7e8';
+    ctx.fillRect(wx - 1, hullTop + 11, 10, 8);
+    ctx.fillStyle = 'rgba(230, 253, 255, 0.85)';
+    ctx.fillRect(wx, hullTop + 12, 4, 2);
+    ctx.fillStyle = 'rgba(24, 70, 84, 0.5)';
+    ctx.fillRect(wx + 6, hullTop + 14, 3, 4);
+  }
+
+  // Toberas y llama de los propulsores.
+  for (const nx of [x - 30, x + 22]) {
+    ctx.fillStyle = '#18262f';
+    ctx.fillRect(nx, hullBottom - 2, 14, 4);
+    ctx.fillStyle = '#4c6575';
+    ctx.fillRect(nx + 1, hullBottom - 2, 12, 1);
+  }
+  if (lift > 2 && !reducedMotion) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const nx of [x - 27, x + 25]) {
+      const flame = 8 + Math.abs(Math.sin(elapsed * 22 + nx)) * 10;
+      const g = ctx.createLinearGradient(0, hullBottom, 0, hullBottom + flame);
+      g.addColorStop(0, 'rgba(220, 252, 255, 0.95)');
+      g.addColorStop(0.5, 'rgba(103, 232, 249, 0.55)');
+      g.addColorStop(1, 'rgba(103, 232, 249, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(nx - 2, hullBottom, 8, flame);
+    }
+    ctx.restore();
+  }
+
+  // Cúpula de cristal: anillos de píxeles y reflejos.
+  const domeH = 34;
+  const domeTop = hullTop - domeH;
+  const rows = [26, 40, 50, 58, 64, 68];
+  for (let i = 0; i < rows.length; i++) {
+    const w = rows[i];
+    const ry = domeTop + i * 5;
+    ctx.fillStyle = i < 2 ? '#9fb6c4' : i > 3 ? '#6f8798' : '#8aa3b3';
+    ctx.fillRect(Math.round(x - w / 2), ry, w, 5);
+  }
+  const glass = ctx.createLinearGradient(0, domeTop, 0, hullTop);
+  glass.addColorStop(0, 'rgba(176, 236, 246, 0.85)');
+  glass.addColorStop(0.45, 'rgba(74, 152, 176, 0.85)');
+  glass.addColorStop(1, 'rgba(20, 58, 76, 0.9)');
+  ctx.fillStyle = glass;
+  ctx.fillRect(x - 26, domeTop + 4, 52, domeH - 8);
+  ctx.fillRect(x - 32, domeTop + 14, 64, domeH - 18);
+  // Reflejo vertical.
+  ctx.fillStyle = 'rgba(236, 254, 255, 0.5)';
+  ctx.fillRect(x - 20, domeTop + 6, 5, domeH - 14);
+  ctx.fillRect(x - 16, domeTop + 9, 2, domeH - 20);
+  // Costillas de la cúpula.
+  ctx.fillStyle = 'rgba(28, 54, 68, 0.55)';
+  ctx.fillRect(x - 1, domeTop + 2, 2, domeH - 4);
+  ctx.fillRect(x - 32, hullTop - 4, 64, 4);
+  ctx.fillStyle = '#b9cdd8';
+  ctx.fillRect(x - 32, hullTop - 4, 64, 1);
+  // Luces internas.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const domeGlow = ctx.createRadialGradient(x, domeTop + 18, 2, x, domeTop + 18, 34);
+  domeGlow.addColorStop(0, `rgba(103, 232, 249, ${(0.28 + blink * 0.18).toFixed(3)})`);
+  domeGlow.addColorStop(1, 'rgba(103, 232, 249, 0)');
+  ctx.fillStyle = domeGlow;
+  ctx.fillRect(x - 34, domeTop - 6, 68, 52);
+  ctx.restore();
+
+  // Antena con baliza.
+  ctx.fillStyle = '#5c7484';
+  ctx.fillRect(x + 18, domeTop - 16, 2, 18);
+  ctx.fillRect(x + 16, domeTop - 18, 6, 2);
+  ctx.fillStyle = `rgba(255, 120, 90, ${blink.toFixed(3)})`;
+  ctx.fillRect(x + 17, domeTop - 21, 4, 3);
+
+  // Luces de aterrizaje en el borde del casco.
+  const lightA = 0.35 + Math.abs(Math.sin(elapsed * 2.4)) * 0.65;
+  const lightB = 0.35 + Math.abs(Math.sin(elapsed * 2.4 + Math.PI)) * 0.65;
+  ctx.fillStyle = `rgba(150, 240, 255, ${lightA.toFixed(3)})`;
+  ctx.fillRect(left + 4, hullTop + 2, 3, 3);
+  ctx.fillStyle = `rgba(255, 170, 120, ${lightB.toFixed(3)})`;
+  ctx.fillRect(right - 7, hullTop + 2, 3, 3);
+
+  // Motas de energía alrededor de la nave.
+  if (!reducedMotion) {
+    for (let i = 0; i < 6; i++) {
+      const a = (elapsed * 0.6 + i * 0.17) % 1;
+      const mx = x - 46 + hash2(i * 3 + 1, Math.floor(elapsed * 3)) * 92;
+      const my = hullBottom - 6 - a * 54;
+      ctx.fillStyle = `rgba(150, 240, 255, ${((1 - a) * 0.4).toFixed(3)})`;
+      ctx.fillRect(Math.round(mx), Math.round(my), 1, 2);
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
+ * El viajero: silueta encapuchada. Bajo la capucha no hay rostro, sólo una
+ * sombra fría. Camina con el peso de alguien que ya no debería estar aquí.
+ */
+function drawFutureTraveler(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  elapsed: number,
+  facing: -1 | 1,
+  walking: boolean
+): void {
+  const step = walking && Math.floor(elapsed * 7) % 2 === 0 ? 1 : 0;
+  const bob = walking ? Math.abs(Math.sin(elapsed * 7)) * 1.5 : Math.sin(elapsed * 1.4) * 0.6;
+  const bx = Math.round(x);
+  const by = Math.round(y - bob);
+  const look = facing >= 0 ? 1 : -1;
+  const sway = walking ? Math.sin(elapsed * 7) * 1.3 : Math.sin(elapsed * 1.1) * 0.5;
+
+  ctx.save();
+
+  // Sombra doble: cuerpo y halo frío de la máquina.
+  ctx.fillStyle = 'rgba(6, 16, 26, 0.36)';
+  ctx.beginPath();
+  ctx.ellipse(bx, y + 2, 14, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(103, 232, 249, 0.08)';
+  ctx.beginPath();
+  ctx.ellipse(bx, y + 2, 9, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Botas de suela gruesa.
+  ctx.fillStyle = '#090d15';
+  ctx.fillRect(bx - 9 + step, by - 6, 7, 5);
+  ctx.fillRect(bx + 2 - step, by - 6, 7, 5);
+  ctx.fillStyle = '#39465f';
+  ctx.fillRect(bx - 9 + step, by - 6, 6, 1);
+  ctx.fillRect(bx + 2 - step, by - 6, 6, 1);
+  ctx.fillStyle = '#05080e';
+  ctx.fillRect(bx - 10 + step, by - 2, 8, 2);
+  ctx.fillRect(bx + 2 - step, by - 2, 8, 2);
+
+  // Túnica larga con vuelo y pliegues profundos.
+  const hemL = bx - 13 + sway * 0.45;
+  const hemR = bx + 13 + sway * 0.45;
+  ctx.fillStyle = '#1b2238';
+  ctx.beginPath();
+  ctx.moveTo(bx - 8, by - 31);
+  ctx.lineTo(bx + 8, by - 31);
+  ctx.lineTo(hemR, by - 6);
+  ctx.lineTo(hemL, by - 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#242e4b';
+  ctx.beginPath();
+  ctx.moveTo(bx - 7, by - 30);
+  ctx.lineTo(bx + 1, by - 30);
+  ctx.lineTo(bx + 3 + sway * 0.3, by - 7);
+  ctx.lineTo(bx - 9 + sway * 0.45, by - 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(8, 12, 22, 0.6)';
+  ctx.fillRect(bx - 1, by - 29, 2, 21);
+  ctx.fillRect(bx - 6, by - 28, 1, 18);
+  ctx.fillRect(bx + 6, by - 28, 1, 18);
+  // Dobladillo reforzado.
+  ctx.fillStyle = '#39456a';
+  ctx.fillRect(Math.round(hemL), by - 7, Math.round(hemR - hemL), 2);
+  ctx.fillStyle = 'rgba(103, 232, 249, 0.28)';
+  ctx.fillRect(Math.round(hemL) + 1, by - 6, Math.round(hemR - hemL) - 2, 1);
+
+  // Torso y capa corta de viaje.
+  ctx.fillStyle = '#242e4b';
+  ctx.fillRect(bx - 9, by - 40, 18, 11);
+  ctx.fillStyle = '#303d63';
+  ctx.beginPath();
+  ctx.moveTo(bx - 13, by - 37);
+  ctx.lineTo(bx - 8, by - 42);
+  ctx.lineTo(bx + 8, by - 42);
+  ctx.lineTo(bx + 13, by - 37);
+  ctx.lineTo(bx + 10, by - 31);
+  ctx.lineTo(bx - 10, by - 31);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#3d4b78';
+  ctx.fillRect(bx - 8, by - 42, 16, 1);
+  ctx.fillStyle = '#141a2a';
+  ctx.fillRect(bx - 10, by - 32, 20, 2);
+  ctx.fillStyle = 'rgba(103, 232, 249, 0.18)';
+  ctx.fillRect(bx - 12, by - 36, 1, 5);
+  ctx.fillRect(bx + 11, by - 36, 1, 5);
+
+  // Mangas anchas y guantes.
+  ctx.fillStyle = '#202944';
+  ctx.beginPath();
+  ctx.moveTo(bx - 12, by - 39);
+  ctx.lineTo(bx - 16, by - 27);
+  ctx.lineTo(bx - 11, by - 25);
+  ctx.lineTo(bx - 8, by - 35);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(bx + 12, by - 39);
+  ctx.lineTo(bx + 16, by - 27);
+  ctx.lineTo(bx + 11, by - 25);
+  ctx.lineTo(bx + 8, by - 35);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#2f3c60';
+  ctx.fillRect(bx - 15, by - 39, 2, 10);
+  ctx.fillRect(bx + 13, by - 39, 2, 10);
+  ctx.fillStyle = '#0a0f1b';
+  ctx.fillRect(bx - 13, by - 26, 5, 4);
+  ctx.fillRect(bx + 8, by - 26, 5, 4);
+
+  // Cinturón con hebilla de energía.
+  ctx.fillStyle = '#0d1320';
+  ctx.fillRect(bx - 9, by - 23, 18, 3);
+  ctx.fillStyle = '#67e8f9';
+  ctx.fillRect(bx + look * 2 - 1, by - 23, 3, 2);
+  ctx.fillStyle = 'rgba(224, 255, 255, 0.8)';
+  ctx.fillRect(bx + look * 2, by - 23, 1, 1);
+
+  // Capucha alta y capa de viaje.
+  ctx.fillStyle = '#1a2138';
+  ctx.fillRect(bx - 8, by - 45, 16, 5);
+  ctx.beginPath();
+  ctx.moveTo(bx - 9, by - 41);
+  ctx.lineTo(bx - 8, by - 48);
+  ctx.lineTo(bx - 4, by - 53);
+  ctx.lineTo(bx + 4, by - 53);
+  ctx.lineTo(bx + 8, by - 47);
+  ctx.lineTo(bx + 9, by - 40);
+  ctx.lineTo(bx + 6, by - 37);
+  ctx.lineTo(bx - 6, by - 37);
+  ctx.closePath();
+  ctx.fillStyle = '#2c3859';
+  ctx.fill();
+  ctx.fillStyle = '#3d4b75';
+  ctx.beginPath();
+  ctx.moveTo(bx - 4, by - 52);
+  ctx.lineTo(bx + 4, by - 52);
+  ctx.lineTo(bx + 6, by - 46);
+  ctx.lineTo(bx - 6, by - 46);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(103, 232, 249, 0.3)';
+  ctx.fillRect(bx + look * 7, by - 46, 1, 6);
+  ctx.fillStyle = '#101524';
+  ctx.fillRect(bx - 8, by - 39, 16, 2);
+
+  // Velo del rostro: un vacío frío, sin rasgos.
+  const faceX = bx + look;
+  const faceGrad = ctx.createLinearGradient(0, by - 50, 0, by - 40);
+  faceGrad.addColorStop(0, '#03050a');
+  faceGrad.addColorStop(0.7, '#070c16');
+  faceGrad.addColorStop(1, 'rgba(10, 18, 32, 0.9)');
+  ctx.fillStyle = faceGrad;
+  ctx.beginPath();
+  ctx.ellipse(faceX, by - 45, 4.5, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(125, 211, 252, 0.22)';
+  ctx.fillRect(bx + look * 5, by - 48, 1, 6);
+
+  // Estrellas diminutas atrapadas en el vacío.
+  for (let i = 0; i < 3; i++) {
+    const drift = (elapsed * 0.3 + i * 0.31) % 1;
+    const sx = faceX - 2 + Math.round(hash2(i + 3, 7) * 4);
+    const sy = Math.round(by - 48 + drift * 5);
+    ctx.fillStyle = `rgba(186, 230, 253, ${(0.25 + (1 - drift) * 0.5).toFixed(3)})`;
+    ctx.fillRect(sx, sy, 1, 1);
+  }
+
+  // Motas de tiempo alrededor de la figura.
+  if (!walking) {
+    for (let i = 0; i < 4; i++) {
+      const a = (elapsed * 0.5 + i * 0.26) % 1;
+      ctx.fillStyle = `rgba(140, 226, 248, ${((1 - a) * 0.5).toFixed(3)})`;
+      ctx.fillRect(bx - 13 + i * 8, Math.round(by - 12 - a * 24), 1, 2);
+    }
+  }
+
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------------ */
 /* INTERIOR DE LA CABAÑA                                              */
 /* ------------------------------------------------------------------ */
 
@@ -2909,6 +3492,10 @@ export interface IslaNatalCabinRenderParams {
   prompt: IslaNatalPromptSpec | null;
   /** La mochila sigue colgada del clavo junto a la ventana. */
   backpackOnHook: boolean;
+  /** La radio de la mesa está encendida y suena durante la intro. */
+  radioOn?: boolean;
+  /** Tormenta del aviso: el cielo se parte mientras Pixel está adentro. */
+  storm?: { t: number } | null;
 }
 
 /** Sala de la cabaña: madera cálida, luz de tarde y la mochila familiar. */
@@ -3344,100 +3931,150 @@ function drawCabinFurniture(ctx: CanvasRenderingContext2D, elapsed: number, redu
   }
 }
 
-/** Guitarra acústica de la familia, colgada de un clavo sobre la cama. */
+/** Guitarra eléctrica roja de la familia, colgada de un clavo sobre la cama. */
 function drawCabinGuitar(ctx: CanvasRenderingContext2D): void {
   const cx = 52;
   ctx.save();
 
   // Clavo y cordón de cuero.
   ctx.fillStyle = '#1d1008';
-  ctx.fillRect(cx - 1, 48, 3, 5);
+  ctx.fillRect(cx - 1, 46, 3, 5);
   ctx.fillStyle = '#6b4a2a';
-  ctx.fillRect(cx, 52, 1, 6);
+  ctx.fillRect(cx, 50, 1, 6);
 
-  // Mástil y pala.
-  ctx.fillStyle = '#2a170b';
-  ctx.fillRect(cx - 3, 58, 7, 38);
-  ctx.fillStyle = '#8a5a2e';
-  ctx.fillRect(cx - 2, 58, 5, 38);
-  ctx.fillStyle = '#c08a4e';
-  ctx.fillRect(cx - 2, 58, 1, 38);
-  ctx.fillStyle = '#2a170b';
-  ctx.fillRect(cx - 5, 54, 11, 9);
-  ctx.fillStyle = '#5c3a1f';
-  ctx.fillRect(cx - 4, 55, 9, 7);
-  // Clavijas doradas.
-  ctx.fillStyle = '#d9b45a';
-  ctx.fillRect(cx - 7, 56, 2, 2);
-  ctx.fillRect(cx - 7, 60, 2, 2);
-  ctx.fillRect(cx + 6, 56, 2, 2);
-  ctx.fillRect(cx + 6, 60, 2, 2);
-  // Trastes.
-  ctx.fillStyle = '#c9ab7c';
-  for (let y = 64; y < 94; y += 6) ctx.fillRect(cx - 2, y, 5, 1);
+  // Mástil de palo rosa con trastes claros.
+  ctx.fillStyle = '#170c06';
+  ctx.fillRect(cx - 3, 62, 7, 26);
+  ctx.fillStyle = '#4a2a17';
+  ctx.fillRect(cx - 2, 62, 5, 26);
+  ctx.fillStyle = '#7d4a2b';
+  ctx.fillRect(cx - 2, 62, 1, 26);
+  ctx.fillStyle = 'rgba(226, 214, 190, 0.55)';
+  for (let y = 67; y < 88; y += 5) ctx.fillRect(cx - 2, y, 5, 1);
 
-  // Caja acústica: dos lóbulos superpuestos con sombra lateral.
-  ctx.fillStyle = 'rgba(18, 10, 4, 0.4)';
-  ctx.beginPath();
-  ctx.ellipse(cx + 2, 108, 15, 18, 0, 0, Math.PI * 2);
+  // Pala roja con clavijas de cromo.
+  ctx.fillStyle = '#170c06';
+  ctx.fillRect(cx - 6, 51, 13, 12);
+  ctx.fillStyle = '#b3241c';
+  ctx.fillRect(cx - 5, 52, 11, 10);
+  ctx.fillStyle = '#e04a36';
+  ctx.fillRect(cx - 4, 52, 9, 1);
+  ctx.fillStyle = '#d7dbe2';
+  ctx.fillRect(cx - 8, 54, 2, 2);
+  ctx.fillRect(cx - 8, 58, 2, 2);
+  ctx.fillRect(cx + 6, 54, 2, 2);
+  ctx.fillRect(cx + 6, 58, 2, 2);
+  ctx.fillStyle = '#8f949c';
+  ctx.fillRect(cx - 8, 55, 2, 1);
+  ctx.fillRect(cx + 6, 55, 2, 1);
+
+  // Cuerpo sólido rojo con doble cutaway.
+  const outline: [number, number][] = [
+    [cx - 4, 84],
+    [cx - 13, 87],
+    [cx - 15, 97],
+    [cx - 12, 107],
+    [cx - 13, 117],
+    [cx - 6, 124],
+    [cx + 6, 124],
+    [cx + 13, 117],
+    [cx + 12, 107],
+    [cx + 15, 97],
+    [cx + 13, 87],
+    [cx + 4, 84],
+  ];
+  const body: [number, number][] = [
+    [cx - 4, 86],
+    [cx - 11, 89],
+    [cx - 13, 97],
+    [cx - 10, 107],
+    [cx - 11, 116],
+    [cx - 5, 122],
+    [cx + 5, 122],
+    [cx + 11, 116],
+    [cx + 10, 107],
+    [cx + 13, 97],
+    [cx + 11, 89],
+    [cx + 4, 86],
+  ];
+  const trace = (pts: [number, number][]) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  };
+  ctx.fillStyle = '#2a0a08';
+  trace(outline);
   ctx.fill();
-  ctx.fillStyle = '#3a2110';
-  ctx.beginPath();
-  ctx.ellipse(cx, 106, 15, 18, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(cx, 88, 11, 11, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Tapa de abeto cálida.
-  ctx.fillStyle = '#b5753a';
-  ctx.beginPath();
-  ctx.ellipse(cx, 105, 13, 16, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(cx, 88, 9, 9, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#d69a58';
-  ctx.beginPath();
-  ctx.ellipse(cx - 3, 103, 7, 11, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#a86733';
-  ctx.beginPath();
-  ctx.ellipse(cx + 5, 108, 6, 12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#c22a20';
+  trace(body);
   ctx.fill();
 
-  // Boca, roseta y puente.
-  ctx.fillStyle = '#1c0d05';
+  // Brillo del barniz en el lóbulo superior izquierdo.
+  ctx.fillStyle = '#e04a36';
   ctx.beginPath();
-  ctx.ellipse(cx, 92, 5, 5, 0, 0, Math.PI * 2);
+  ctx.moveTo(cx - 9, 92);
+  ctx.lineTo(cx - 3, 90);
+  ctx.lineTo(cx - 3, 110);
+  ctx.lineTo(cx - 8, 112);
+  ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = 'rgba(240, 206, 150, 0.55)';
+  ctx.fillStyle = 'rgba(255, 220, 200, 0.35)';
+  ctx.fillRect(cx - 11, 90, 2, 8);
+  ctx.fillRect(cx - 10, 88, 5, 1);
+
+  // Golpeador perla.
+  ctx.fillStyle = '#ece6d6';
+  ctx.beginPath();
+  ctx.moveTo(cx + 3, 94);
+  ctx.lineTo(cx + 12, 100);
+  ctx.lineTo(cx + 10, 113);
+  ctx.lineTo(cx + 3, 116);
+  ctx.lineTo(cx + 1, 106);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(160, 150, 130, 0.35)';
+  ctx.fillRect(cx + 4, 96, 1, 18);
+
+  // Pastillas dobles y puente cromado.
+  for (const py of [96, 106]) {
+    ctx.fillStyle = '#171310';
+    ctx.fillRect(cx - 7, py, 12, 4);
+    ctx.fillStyle = '#c9ced6';
+    for (let i = 0; i < 6; i++) ctx.fillRect(cx - 6 + i * 2, py + 1, 1, 2);
+  }
+  ctx.fillStyle = '#b9bfc8';
+  ctx.fillRect(cx - 7, 116, 14, 3);
+  ctx.fillStyle = '#6f7680';
+  for (let i = 0; i < 6; i++) ctx.fillRect(cx - 6 + i * 2, 117, 1, 2);
+  // Perillas de volumen y tono.
+  ctx.fillStyle = '#dfe3e8';
+  ctx.fillRect(cx + 8, 115, 3, 3);
+  ctx.fillRect(cx + 8, 120, 3, 3);
+  ctx.fillStyle = '#5c6169';
+  ctx.fillRect(cx + 9, 116, 1, 1);
+  ctx.fillRect(cx + 9, 121, 1, 1);
+
+  // Palanca de vibrato.
+  ctx.strokeStyle = '#c9ced6';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.ellipse(cx, 92, 7, 7, 0, 0, Math.PI * 2);
+  ctx.moveTo(cx + 6, 118);
+  ctx.lineTo(cx + 12, 124);
+  ctx.lineTo(cx + 14, 121);
   ctx.stroke();
-  ctx.fillStyle = '#3a2110';
-  ctx.fillRect(cx - 6, 114, 13, 3);
-  ctx.fillStyle = '#e8d8b8';
-  ctx.fillRect(cx - 6, 114, 13, 1);
 
   // Cuerdas.
-  ctx.fillStyle = 'rgba(232, 226, 206, 0.55)';
-  ctx.fillRect(cx - 1, 60, 1, 54);
-  ctx.fillRect(cx + 1, 60, 1, 54);
-  ctx.fillRect(cx + 3, 64, 1, 50);
-
-  // Golpeador y reflejo de la lámpara.
-  ctx.fillStyle = 'rgba(60, 30, 12, 0.55)';
-  ctx.beginPath();
-  ctx.ellipse(cx + 8, 100, 4, 7, 0.4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255, 220, 160, 0.28)';
-  ctx.fillRect(cx - 11, 82, 2, 12);
+  ctx.fillStyle = 'rgba(236, 240, 246, 0.6)';
+  ctx.fillRect(cx - 2, 60, 1, 57);
+  ctx.fillRect(cx, 60, 1, 57);
+  ctx.fillRect(cx + 2, 60, 1, 57);
+  ctx.fillRect(cx + 4, 62, 1, 55);
 
   ctx.restore();
 }
 
-/** Teclado musical de madera con banco, en el rincón del retrato. */
+/** Teclado musical blanco sobre su banco, en el rincón del retrato. */
 function drawCabinKeyboard(ctx: CanvasRenderingContext2D): void {
   const x = 252;
   const y = 100;
@@ -3449,42 +4086,42 @@ function drawCabinKeyboard(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = 'rgba(16, 9, 4, 0.35)';
   ctx.fillRect(x - 2, y + 24, w + 4, 4);
 
-  // Patas de madera hasta el zócalo.
-  ctx.fillStyle = '#3a2414';
+  // Patas claras hasta el zócalo.
+  ctx.fillStyle = '#8f897c';
   ctx.fillRect(x + 4, y + 16, 4, 17);
   ctx.fillRect(x + w - 8, y + 16, 4, 17);
-  ctx.fillStyle = '#6b4a2a';
+  ctx.fillStyle = '#ddd6c6';
   ctx.fillRect(x + 5, y + 17, 2, 15);
   ctx.fillRect(x + w - 7, y + 17, 2, 15);
 
-  // Mueble con tapa inclinada y ribete claro.
-  ctx.fillStyle = '#1f120a';
+  // Mueble blanco marfil con contorno gris cálido.
+  ctx.fillStyle = '#5a544a';
   ctx.fillRect(x - 1, y - 1, w + 2, 19);
-  ctx.fillStyle = '#7a4a26';
+  ctx.fillStyle = '#ece7da';
   ctx.fillRect(x, y, w, 17);
-  ctx.fillStyle = '#9c6535';
+  ctx.fillStyle = '#fbf7ec';
   ctx.fillRect(x, y, w, 3);
-  ctx.fillStyle = '#5c3519';
+  ctx.fillStyle = '#c9c2b2';
   ctx.fillRect(x, y + 14, w, 3);
-  ctx.fillStyle = 'rgba(255, 224, 168, 0.35)';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(x + 1, y, w - 2, 1);
 
   // Fieltro rojo bajo las teclas.
-  ctx.fillStyle = '#8f2f24';
+  ctx.fillStyle = '#a83226';
   ctx.fillRect(x + 3, y + 4, w - 6, 3);
 
   // Teclas blancas con separaciones y teclas negras en patrón de piano.
   const keysY = y + 6;
   const keysW = w - 6;
-  ctx.fillStyle = '#f0e6cf';
+  ctx.fillStyle = '#f8f3e6';
   ctx.fillRect(x + 3, keysY, keysW, 7);
-  ctx.fillStyle = 'rgba(120, 100, 70, 0.45)';
+  ctx.fillStyle = 'rgba(140, 130, 112, 0.5)';
   for (let i = 1; i < 14; i++) {
     ctx.fillRect(x + 3 + Math.round((i * keysW) / 14), keysY, 1, 7);
   }
   // Negras: dos, tres, dos, tres...
   const blackPattern = [1, 2, 4, 5, 6, 8, 9, 11, 12, 13];
-  ctx.fillStyle = '#241a12';
+  ctx.fillStyle = '#1f1a16';
   for (const k of blackPattern) {
     const kx = x + 3 + Math.round((k * keysW) / 14) - 1;
     ctx.fillRect(kx, keysY, 2, 4);
@@ -3492,10 +4129,10 @@ function drawCabinKeyboard(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
   ctx.fillRect(x + 3, keysY, keysW, 1);
 
-  // Nombre grabado en latón y un par de perillas.
-  ctx.fillStyle = '#d9b45a';
+  // Nombre grabado en metal y un par de perillas.
+  ctx.fillStyle = '#9aa0a8';
   ctx.fillRect(x + w - 15, y + 1, 11, 2);
-  ctx.fillStyle = '#3a2414';
+  ctx.fillStyle = '#3a3630';
   ctx.fillRect(x + 5, y + 1, 2, 2);
   ctx.fillRect(x + 10, y + 1, 2, 2);
 
@@ -3552,6 +4189,39 @@ function drawCabinBackpack(ctx: CanvasRenderingContext2D, elapsed: number, reduc
   ctx.restore();
 }
 
+/** Radio encendida sobre la mesa: dial cálido y ondas de sonido. */
+function drawCabinRadioLive(
+  ctx: CanvasRenderingContext2D,
+  elapsed: number,
+  reducedMotion: boolean
+): void {
+  const rx = 363;
+  const ry = 149;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const pulse = 0.5 + Math.sin(elapsed * 3.1) * 0.25;
+  const glow = ctx.createRadialGradient(rx, ry, 1, rx, ry, 26);
+  glow.addColorStop(0, `rgba(255, 206, 130, ${(0.3 * pulse).toFixed(3)})`);
+  glow.addColorStop(1, 'rgba(255, 180, 90, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(rx - 28, ry - 24, 56, 48);
+
+  // Ondas que salen del altavoz.
+  for (let i = 0; i < 3; i++) {
+    const p = ((reducedMotion ? 0.5 : elapsed * 0.9) + i / 3) % 1;
+    ctx.strokeStyle = `rgba(255, 214, 150, ${((1 - p) * 0.4).toFixed(3)})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(rx + 7, ry + 2, 6 + p * 24, -0.8, 0.6);
+    ctx.stroke();
+  }
+
+  // Dial encendido.
+  ctx.fillStyle = `rgba(255, 236, 190, ${(0.55 + pulse * 0.35).toFixed(3)})`;
+  ctx.fillRect(rx - 6, ry - 2, 4, 2);
+  ctx.restore();
+}
+
 export function renderIslaNatalCabin(params: IslaNatalCabinRenderParams): void {
   const { ctx, vw, vh, camera, elapsed, reducedMotion } = params;
   ctx.imageSmoothingEnabled = false;
@@ -3562,6 +4232,7 @@ export function renderIslaNatalCabin(params: IslaNatalCabinRenderParams): void {
   ctx.translate(-Math.round(camera.x), -Math.round(camera.y));
   drawCabinShell(ctx, elapsed, reducedMotion);
   drawCabinFurniture(ctx, elapsed, reducedMotion);
+  if (params.radioOn) drawCabinRadioLive(ctx, elapsed, reducedMotion);
   if (params.backpackOnHook) drawCabinBackpack(ctx, elapsed, reducedMotion);
   drawPlayer(ctx, params, elapsed);
   if (params.prompt) {
@@ -3582,6 +4253,72 @@ export function renderIslaNatalCabin(params: IslaNatalCabinRenderParams): void {
   grade.addColorStop(1, 'rgba(40, 18, 8, 0.16)');
   ctx.fillStyle = grade;
   ctx.fillRect(0, 0, vw, vh);
+
+  // Tormenta del aviso: la sala se oscurece y la ventana devuelve destellos.
+  if (params.storm) {
+    const st = params.storm.t;
+    const dark = Math.min(0.46, 0.1 + st * 0.14);
+    ctx.fillStyle = `rgba(9, 15, 28, ${dark.toFixed(3)})`;
+    ctx.fillRect(0, 0, vw, vh);
+
+    const gaussian = (center: number, spread: number) => {
+      const d = (st - center) / spread;
+      return Math.exp(-d * d);
+    };
+    const flash = Math.max(
+      gaussian(0.3, 0.1),
+      gaussian(1.15, 0.13),
+      gaussian(2.25, 0.15),
+      gaussian(3.0, 0.12)
+    );
+    if (flash > 0.01) {
+      // Luz fría que entra por la ventana y trepa por la pared.
+      const wx = 136 - Math.round(camera.x);
+      const wy = 56 - Math.round(camera.y);
+      const beam = ctx.createRadialGradient(wx, wy, 6, wx, wy, 300);
+      beam.addColorStop(0, `rgba(196, 238, 255, ${(flash * 0.66).toFixed(3)})`);
+      beam.addColorStop(0.42, `rgba(140, 200, 245, ${(flash * 0.3).toFixed(3)})`);
+      beam.addColorStop(1, 'rgba(120, 180, 230, 0)');
+      ctx.fillStyle = beam;
+      ctx.fillRect(0, 0, vw, vh);
+
+      ctx.fillStyle = `rgba(226, 245, 255, ${(flash * 0.3).toFixed(3)})`;
+      ctx.fillRect(0, 0, vw, vh);
+
+      // El rayo, dibujado dentro del marco de la ventana.
+      const wx0 = 94 - Math.round(camera.x);
+      const wy0 = 26 - Math.round(camera.y);
+      const strike = Math.max(
+        Math.exp(-Math.pow((st - 0.3) / 0.055, 2)),
+        Math.exp(-Math.pow((st - 2.25) / 0.06, 2))
+      );
+      if (strike > 0.05) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = `rgba(240, 253, 255, ${(strike * 0.95).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(wx0 + 54, wy0 + 2);
+        ctx.lineTo(wx0 + 48, wy0 + 14);
+        ctx.lineTo(wx0 + 55, wy0 + 16);
+        ctx.lineTo(wx0 + 42, wy0 + 38);
+        ctx.lineTo(wx0 + 48, wy0 + 40);
+        ctx.lineTo(wx0 + 36, wy0 + 58);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(150, 226, 255, ${(strike * 0.5).toFixed(3)})`;
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Destello cegador del primer impacto: la sala entera se vuelve blanca.
+      const blind = Math.exp(-Math.pow((st - 0.28) / 0.06, 2));
+      if (blind > 0.01) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${(blind * 0.92).toFixed(3)})`;
+        ctx.fillRect(0, 0, vw, vh);
+      }
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -3604,6 +4341,7 @@ export function renderIslaNatalFrame(params: IslaNatalRenderParams): void {
     particles,
     prompt,
     shockwaves,
+    travelerEvent,
   } = params;
 
   ctx.imageSmoothingEnabled = false;
@@ -3653,7 +4391,8 @@ export function renderIslaNatalFrame(params: IslaNatalRenderParams): void {
     if (!isWorldBoxVisible(tree.x - 28, tree.y - 80, 56, 92, camX, camY, vw, vh)) continue;
     ySorted.push({
       sortY: tree.y + 10,
-      draw: () => drawHandcraftedTree(ctx, tree.x, tree.y, tree.variant),
+      draw: () =>
+        drawHandcraftedTree(ctx, tree.x, tree.y, tree.variant, elapsed, reducedMotion),
     });
   }
   for (const p of ISLA_NATAL_PALMS) {
@@ -3703,12 +4442,58 @@ export function renderIslaNatalFrame(params: IslaNatalRenderParams): void {
   ySorted.push({ sortY: SHELLS_POI_POS.y + 8, draw: () => drawShellCluster(ctx, elapsed) });
   ySorted.push({ sortY: MAILBOX_POS.y + 1, draw: () => drawMailbox(ctx) });
   ySorted.push({ sortY: CRATE_POS.y + 1, draw: () => drawCrate(ctx, elapsed, reducedMotion) });
+  if (isWorldBoxVisible(MIRADOR_POS.x - 64, MIRADOR_POS.y - 40, 128, 52, camX, camY, vw, vh)) {
+    ySorted.push({
+      sortY: MIRADOR_POS.y + 2,
+      draw: () => drawAltoMirador(ctx, elapsed, reducedMotion),
+    });
+  }
   if (paddleOnGround) {
     ySorted.push({
       sortY: CABINET_POS.y + 24,
       draw: () => drawPaddleItem(ctx, elapsed, reducedMotion),
     });
   }
+  if (travelerEvent && travelerEvent.phase !== 'storm') {
+    const phase = travelerEvent.phase;
+    const tt = travelerEvent.t;
+    const site = ISLA_NATAL_TRAVELER_SITE;
+    let lift = 0;
+    if (phase === 'arrival') {
+      lift = 240 * (1 - smoothstep(tt / 2.4));
+    } else if (phase === 'departure') {
+      lift = 260 * smoothstep(tt / 2.0);
+    }
+    const landed = lift < 1.5;
+    ySorted.push({
+      sortY: site.y + 2,
+      draw: () => {
+        if (lift < 40) drawLandingScorch(ctx, site.x, site.y, elapsed);
+        drawTravelerShip(ctx, site.x, site.y, lift, elapsed, reducedMotion, landed);
+      },
+    });
+
+    if (phase === 'descend' || phase === 'talk' || phase === 'board') {
+      const doorX = site.x - DOOR_OFFSET;
+      const talkX = site.x - TALK_OFFSET;
+      let px = talkX;
+      let walking = false;
+      if (phase === 'descend') {
+        const p = clamp01(tt / 1.7);
+        px = doorX + (talkX - doorX) * smoothstep(p);
+        walking = p > 0.08 && p < 0.95;
+      } else if (phase === 'board') {
+        const p = clamp01(tt / 1.4);
+        px = talkX + (doorX - talkX) * smoothstep(p);
+        walking = p > 0.08 && p < 0.95;
+      }
+      ySorted.push({
+        sortY: site.y + 4,
+        draw: () => drawFutureTraveler(ctx, px, site.y, elapsed, -1, walking),
+      });
+    }
+  }
+
   ySorted.push({ sortY: params.player.y + 4, draw: () => drawPlayer(ctx, params, elapsed) });
 
   ySorted.sort((a, b) => a.sortY - b.sortY);
@@ -3851,4 +4636,25 @@ export function renderIslaNatalFrame(params: IslaNatalRenderParams): void {
   ctx.fillStyle = ray;
   ctx.fillRect(0, 0, vw, vh);
   ctx.restore();
+
+  // Tormenta de la llegada: el cielo se oscurece y se parte en destellos.
+  if (travelerEvent?.phase === 'storm') {
+    const st = travelerEvent.t;
+    ctx.fillStyle = `rgba(8, 16, 28, ${(0.34 * Math.min(1, st / 0.5)).toFixed(3)})`;
+    ctx.fillRect(0, 0, vw, vh);
+
+    const gaussian = (center: number, spread: number) => {
+      const d = (st - center) / spread;
+      return Math.exp(-d * d);
+    };
+    const flash = Math.max(
+      gaussian(0.3, 0.11),
+      gaussian(1.05, 0.13),
+      gaussian(1.9, 0.16)
+    );
+    if (flash > 0.01) {
+      ctx.fillStyle = `rgba(226, 245, 255, ${(flash * 0.62).toFixed(3)})`;
+      ctx.fillRect(0, 0, vw, vh);
+    }
+  }
 }

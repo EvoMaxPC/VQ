@@ -37,14 +37,28 @@ function ramp01(v: number): number {
 export function EpicCinematicStage({
   runKey,
   onComplete,
+  startAtSec = 0,
+  endAtSec = TOTAL_CINEMATIC_DURATION_SEC,
 }: {
   runKey: number;
   onComplete: () => void;
-  onEnterPong?: () => void;
+  /** Segundo del metraje en el que arranca esta reproducción. */
+  startAtSec?: number;
+  /** Segundo del metraje en el que termina esta reproducción. */
+  endAtSec?: number;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+
+  // El tramo se congela por reproducción para que el bucle no dependa de props cambiantes.
+  const segmentStartRef = useRef(startAtSec);
+  const segmentEndRef = useRef(endAtSec);
+  segmentStartRef.current = startAtSec;
+  segmentEndRef.current = Math.min(
+    TOTAL_CINEMATIC_DURATION_SEC,
+    Math.max(startAtSec + 1, endAtSec)
+  );
 
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(() => bgmEngine.isMuted());
@@ -100,9 +114,10 @@ export function EpicCinematicStage({
     bgmEngine.setDuckFactor(0);
 
     const seekRaw = new URLSearchParams(window.location.search).get('cinematicAt');
+    const segmentStart = Math.max(0, Math.min(TOTAL_CINEMATIC_DURATION_SEC - 0.05, segmentStartRef.current));
     const seekTo = seekRaw
-      ? Math.max(0, Math.min(TOTAL_CINEMATIC_DURATION_SEC - 0.05, Number(seekRaw) || 0))
-      : 0;
+      ? Math.max(segmentStart, Math.min(TOTAL_CINEMATIC_DURATION_SEC - 0.05, Number(seekRaw) || 0))
+      : segmentStart;
 
     playbackRef.current = {
       elapsedSec: seekTo,
@@ -171,8 +186,8 @@ export function EpicCinematicStage({
           setUiTimeSec(pb.elapsedSec);
         }
 
-        if (pb.elapsedSec >= TOTAL_CINEMATIC_DURATION_SEC) {
-          world.renderAtTime(TOTAL_CINEMATIC_DURATION_SEC, rawDt);
+        if (pb.elapsedSec >= segmentEndRef.current) {
+          world.renderAtTime(segmentEndRef.current, rawDt);
           finishCinematic();
           return;
         }

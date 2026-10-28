@@ -151,6 +151,8 @@ export const ISLA_NATAL_CABIN = {
   roomW: 480,
   roomH: 300,
   spawn: { x: 240, y: 246 },
+  /** Posición de Pixel al comenzar la partida, escuchando la radio de la mesa. */
+  introSpot: { x: 300, y: 214 },
   door: { x: 240, y: 282, radius: 46 },
   backpack: { x: 200, y: 104, radius: 50 },
   /** Muebles que bloquean el paso dentro de la sala. */
@@ -250,6 +252,13 @@ export const ISLA_NATAL_NORTH_PORT_SPAWN = { x: 820, y: 574 };
 export const ISLA_NATAL_ARCADE_ANCHOR = { x: 1251, y: 668, radius: 78 };
 /** Posición donde la paleta queda apoyada tras la victoria (debe coincidir con el renderer). */
 export const ISLA_NATAL_PADDLE_ANCHOR = { x: 1311, y: 664, radius: 64 };
+/**
+ * Punto de aterrizaje de la máquina del viajero: la hierba abierta frente a la
+ * puerta este de la cabaña, para que la escena ocurra a la vista de la casa.
+ */
+export const ISLA_NATAL_TRAVELER_SITE = { x: 740, y: 818 };
+/** Posición de Pixel durante la charla, cara a cara con el viajero. */
+export const ISLA_NATAL_TRAVELER_SCENE_PLAYER = { x: 586, y: 818 };
 
 /* ------------------------------------------------------------------ */
 /* MARCADORES NARRATIVOS (se guardan en island70s.narrativeEvents)     */
@@ -265,6 +274,7 @@ export const ISLA_NATAL_FLAGS = {
   departed: 'isla-natal-partida',
   cabinVisited: 'isla-natal-cabana-vista',
   backpack: 'isla-natal-mochila',
+  travelerWarning: 'isla-natal-aviso-viajero',
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -285,11 +295,20 @@ export type IslaNatalPoiKind =
   | 'paddle'
   | 'departure';
 
+export type IslaNatalDialogSpeaker = 'pixel' | 'traveler';
+
+export interface IslaNatalDialogLine {
+  speaker: IslaNatalDialogSpeaker;
+  text: string;
+}
+
 export interface IslaNatalDialog {
   title: string;
   subtitle?: string;
   paragraphs: string[];
   hint?: string;
+  /** Cuando existe, el diálogo se muestra como una conversación por burbujas. */
+  lines?: IslaNatalDialogLine[];
 }
 
 export interface IslaNatalPoi {
@@ -468,8 +487,8 @@ export const ISLA_NATAL_POIS: IslaNatalPoi[] = [
     kind: 'viewpoint-island',
     x: 424,
     y: 330,
-    radius: 66,
-    label: 'Otear la isla',
+    radius: 72,
+    label: 'Mirar hacia Isla Origen',
     accentHex: '#fcd34d',
     dialog: {
       title: 'Alto de las Rocas',
@@ -570,6 +589,47 @@ export const DEPARTURE_BLOCKED_DIALOG: IslaNatalDialog = {
     'Sin la Barra de Pong no hay forma de cruzar el mar. La respuesta sigue esperando en la arboleda, junto al viejo gabinete.',
   ],
   hint: 'Gana Pong y recoge la barra antes de volver al puerto norte.',
+};
+
+/* ------------------------------------------------------------------ */
+/* EL AVISO DEL VIAJERO                                               */
+/* ------------------------------------------------------------------ */
+
+export const NATAL_STORM_QUESTION_DIALOG: IslaNatalDialog = {
+  title: 'Pixel',
+  subtitle: 'El interior de la cabaña',
+  paragraphs: ['¿Qué fue eso?', '¡Debo salir a revisar!'],
+  hint: 'La puerta golpea con el viento.',
+  lines: [
+    { speaker: 'pixel', text: '¿Qué fue eso?' },
+    { speaker: 'pixel', text: '¡Debo salir a revisar!' },
+  ],
+};
+
+export const NATAL_TRAVELER_DIALOG: IslaNatalDialog = {
+  title: 'El viajero',
+  subtitle: 'Frente a la cabaña',
+  paragraphs: [
+    'Al fin sales.',
+    'Lo que siempre temí. El Reinicio Cero ha llegado.',
+    'Sólo tú puedes devolver las memorias.',
+    'Enciende el viejo Pong del quincho. El que heredaste de tu abuelo.',
+    'Por favor. Ayuda a la humanidad.',
+  ],
+  hint: 'La arboleda espera al este de la isla.',
+  lines: [
+    { speaker: 'traveler', text: 'Al fin sales.' },
+    { speaker: 'pixel', text: '¿Quién eres? ¿Qué fue ese temblor?' },
+    { speaker: 'traveler', text: 'Lo que siempre temí. El Reinicio Cero ha llegado.' },
+    { speaker: 'pixel', text: '¿El Reinicio Cero?' },
+    { speaker: 'traveler', text: 'El día en que el mundo empezó a olvidar.' },
+    { speaker: 'pixel', text: '¿Y por qué vienes a buscarme a mí?' },
+    { speaker: 'traveler', text: 'Porque sólo tú puedes devolver las memorias.' },
+    { speaker: 'pixel', text: '¿Yo? No sé nada de eso.' },
+    { speaker: 'traveler', text: 'Tu abuelo sí. Enciende el viejo Pong del quincho.' },
+    { speaker: 'pixel', text: 'El Pong del abuelo...' },
+    { speaker: 'traveler', text: 'Por favor. La humanidad depende de ti.' },
+  ],
 };
 
 /* ------------------------------------------------------------------ */

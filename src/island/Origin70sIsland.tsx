@@ -262,6 +262,25 @@ function getPongFlightFuelRate(progress: PixelverseProgressState): number {
     : PONG_FLIGHT_FUEL_PER_SECOND;
 }
 
+const SCANNER_PULSE_COST = 20;
+const LANTERN_DRAIN_PER_SECOND = 0.2;
+
+function getScannerRangeScale(progress: PixelverseProgressState): number {
+  return progress.rpg.powersState?.upgradesPurchased?.includes(
+    'upg-scanner-range-1'
+  )
+    ? 1.6
+    : 1;
+}
+
+function getWelderCost(progress: PixelverseProgressState): number {
+  return progress.rpg.powersState?.upgradesPurchased?.includes(
+    'upg-welder-efficiency-1'
+  )
+    ? 5
+    : 15;
+}
+
 type IslandPowerId = 'pong-hoverboard' | 'shifting-blade' | 'orbital-dash' | 'sonar-pulse';
 
 function isIslandPowerUnlocked(power: IslandPowerId, progress: PixelverseProgressState, allUnlocked: boolean): boolean {
@@ -291,7 +310,7 @@ const POWER_DOCK_CSS = `
 .pv-powerdock__labelText{font:700 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:#fde047;}
 .pv-powerdock__labelSub{font:700 6.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.24em;color:#8b9bb2;}
 .pv-powerdock__slots{display:flex;align-items:stretch;gap:5px;}
-.pv-powerdock__side{display:flex;align-items:stretch;gap:5px;padding-left:1px;}
+.pv-slot.is-lowfuel .pv-slot__meterFill{animation:pv-lowfuel 0.6s steps(2) infinite;}.pv-slot.is-lowfuel .pv-slot__status{color:#f87171;animation:pv-lowfuel 0.6s steps(2) infinite;}@keyframes pv-lowfuel{0%,100%{opacity:1;}50%{opacity:.3;}}
 .pv-slot{--slot:#94a3b8;position:relative;display:flex;align-items:center;gap:7px;min-width:108px;padding:6px 9px 8px 7px;border:1px solid rgba(148,163,184,.26);border-radius:7px;background:linear-gradient(180deg,rgba(30,41,59,.92),rgba(15,23,42,.96));color:#cbd5e1;cursor:pointer;text-align:left;overflow:hidden;transition:transform .12s ease,border-color .12s ease,background .12s ease,box-shadow .12s ease;}
 .pv-slot:before{content:"";position:absolute;left:0;top:5px;bottom:5px;width:2px;border-radius:0 2px 2px 0;background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--slot) 85%,transparent),transparent);opacity:.85;pointer-events:none;}
 .pv-slot.is-active:before{opacity:0;}
@@ -303,6 +322,12 @@ const POWER_DOCK_CSS = `
 .pv-slot.is-locked:hover{transform:none;border-color:rgba(148,163,184,.26);background:linear-gradient(180deg,rgba(30,41,59,.92),rgba(15,23,42,.96));}
 .pv-slot__key{width:17px;height:17px;flex:none;display:grid;place-items:center;border-radius:3px;font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e2e8f0;background:rgba(2,6,20,.62);border:1px solid color-mix(in srgb,var(--slot) 40%,rgba(148,163,184,.45));box-shadow:inset 0 -1px 0 rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);}
 .pv-slot.is-active .pv-slot__key{color:var(--slot);background:rgba(2,6,20,.88);border-color:rgba(2,6,20,.55);box-shadow:none;}
+.pv-slot__icon{position:relative;width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:4px;background:radial-gradient(120% 120% at 32% 16%,rgba(255,255,255,.12),rgba(2,6,20,.92) 64%);border:1px solid color-mix(in srgb,var(--slot) 40%,rgba(2,6,20,.85));box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -2px 0 rgba(0,0,0,.5),0 1px 0 rgba(0,0,0,.45);overflow:hidden;}
+.pv-slot__icon:after{content:"";position:absolute;left:1px;right:1px;top:1px;height:42%;border-radius:3px 3px 0 0;background:linear-gradient(180deg,rgba(255,255,255,.10),transparent);pointer-events:none;}
+.pv-slot__icon svg{width:21px;height:21px;display:block;shape-rendering:crispEdges;filter:drop-shadow(0 1px 0 rgba(0,0,0,.55));}
+.pv-slot.is-active .pv-slot__icon{background:radial-gradient(120% 120% at 32% 16%,rgba(255,255,255,.55),rgba(2,6,20,.14) 70%);border-color:rgba(2,6,20,.5);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -2px 0 rgba(0,0,0,.16);}
+.pv-slot.is-active .pv-slot__icon svg{filter:none;}
+.pv-slot.is-locked .pv-slot__icon{filter:grayscale(.55);}
 .pv-slot__body{display:flex;flex-direction:column;gap:2px;min-width:0;}
 .pv-slot__name{font:700 10.5px/1.05 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;}
 .pv-slot__status{font:700 7.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.11em;color:#93a3b8;white-space:nowrap;}
@@ -315,6 +340,8 @@ const POWER_DOCK_CSS = `
 .pv-modekey:hover:not(:disabled){border-color:rgba(249,115,22,.55);background:linear-gradient(180deg,rgba(38,44,58,.96),rgba(16,22,36,.98));}
 .pv-modekey:disabled{opacity:.4;cursor:not-allowed;}
 .pv-modekey__key{width:17px;height:17px;flex:none;display:grid;place-items:center;border-radius:3px;font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#fdba74;background:rgba(2,6,20,.6);border:1px solid rgba(249,115,22,.45);}
+.pv-modekey__icon{width:16px;height:16px;flex:none;opacity:.94;}
+.pv-modekey__icon svg{width:16px;height:16px;display:block;shape-rendering:crispEdges;filter:drop-shadow(0 1px 0 rgba(0,0,0,.6));}
 .pv-modekey__body{display:flex;flex-direction:column;gap:2px;text-align:left;}
 .pv-modekey__label{font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;color:#e2e8f0;}
 .pv-modekey__sub{font:700 6.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;color:#d8a87c;}
@@ -322,11 +349,90 @@ const POWER_DOCK_CSS = `
 .pv-exec:hover{filter:brightness(1.07);transform:translateY(-1px);}
 .pv-exec:active{transform:translateY(0);}
 .pv-exec__key{width:17px;height:17px;flex:none;display:grid;place-items:center;border-radius:3px;font:800 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#fde68a;background:rgba(42,26,2,.82);}
-.pv-exec svg{width:10px;height:10px;flex:none;}
-@media (max-width:1180px){.pv-slot{min-width:0;}}
-@media (max-width:980px){.pv-powerdock__label{display:none;}.pv-slot__name{font-size:9px;}.pv-slot__status{font-size:6.5px;}.pv-modekey__sub{display:none;}}
+.pv-exec svg{width:12px;height:12px;flex:none;shape-rendering:crispEdges;filter:drop-shadow(0 1px 0 rgba(255,255,255,.35));}
+@media (max-width:1180px){.pv-slot{min-width:0;}.pv-slot__icon{width:24px;height:24px;}.pv-slot__icon svg{width:18px;height:18px;}}
+@media (max-width:980px){.pv-powerdock__label{display:none;}.pv-slot__name{font-size:9px;}.pv-slot__status{font-size:6.5px;}.pv-modekey__icon{display:none;}.pv-modekey__sub{display:none;}}
+@media (max-width:860px){.pv-slot__icon{display:none;}}
 @media (max-width:760px){.pv-slot{padding:5px 6px 7px 5px;gap:5px;}.pv-slot__name{font-size:8px;}.pv-slot__status{font-size:6px;letter-spacing:.05em;}.pv-exec{padding:0 8px;}}
 `;
+
+type PowerHudIconKind = 'paddle' | 'blade' | 'dash' | 'sonar' | 'mode' | 'execute';
+
+/* Iconos ilustrativos del dock, dibujados en una grilla de 16px al estilo de
+   los menús de objetos de GBA Advance: silueta oscura, dos tonos y brillo. */
+function PowerHudIcon({ kind }: { kind: PowerHudIconKind }) {
+  switch (kind) {
+    case 'paddle':
+      return (
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+          <rect x="2" y="4" width="4" height="4" fill="#0b1424" />
+          <rect x="3" y="5" width="2" height="2" fill="#f8fafc" />
+          <rect x="0" y="5" width="2" height="1" fill="#67e8f9" opacity=".9" />
+          <rect x="0" y="7" width="1" height="1" fill="#38e8ff" opacity=".7" />
+          <rect x="1" y="9" width="2" height="1" fill="#38e8ff" opacity=".4" />
+          <rect x="9" y="2" width="5" height="12" fill="#3b2503" />
+          <rect x="10" y="3" width="3" height="10" fill="#facc15" />
+          <rect x="10" y="3" width="1" height="10" fill="#fef3c7" />
+          <rect x="12" y="5" width="1" height="6" fill="#a16207" />
+        </svg>
+      );
+    case 'blade':
+      return (
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+          <path d="M8 0l3 3v6H5V3z" fill="#0b1424" />
+          <path d="M8 1l2 2v5H6V3z" fill="#cbd5e1" />
+          <path d="M8 1l2 2v5H8z" fill="#f8fafc" />
+          <rect x="2" y="9" width="12" height="2" fill="#0b1424" />
+          <rect x="3" y="9" width="10" height="1" fill="#fbbf24" />
+          <rect x="3" y="10" width="10" height="1" fill="#b45309" />
+          <rect x="7" y="11" width="3" height="3" fill="#0b1424" />
+          <rect x="7" y="11" width="2" height="2" fill="#92400e" />
+          <rect x="6" y="14" width="5" height="1" fill="#fbbf24" />
+          <rect x="6" y="15" width="5" height="1" fill="#0b1424" />
+        </svg>
+      );
+    case 'dash':
+      return (
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+          <path d="M9 0 3 9h4l-1 7 7-10H9l1-6z" fill="#0b1424" />
+          <path d="M8.6 1 4.7 8h3.2l-.9 5.4L11.4 6H8.4l.9-5z" fill="#22d3ee" />
+          <path d="M8 1 5.6 7h2.2L7.2 11l2.6-4H8.4z" fill="#e0f2fe" />
+          <rect x="0" y="3" width="2" height="1" fill="#67e8f9" opacity=".55" />
+          <rect x="0" y="11" width="2" height="1" fill="#67e8f9" opacity=".4" />
+        </svg>
+      );
+    case 'sonar':
+      return (
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+          <circle cx="8" cy="8" r="6" stroke="#0f4f3d" strokeWidth="1" />
+          <circle cx="8" cy="8" r="3.4" stroke="#1f8a66" strokeWidth="1" />
+          <path d="M8 2a6 6 0 0 1 6 6" stroke="#6ee7b7" strokeWidth="1.2" strokeLinecap="square" />
+          <path d="M8 4.6a3.4 3.4 0 0 1 3.4 3.4" stroke="#a7f3d0" strokeWidth="1.1" strokeLinecap="square" />
+          <path d="M8 8l5-4.4" stroke="#34d399" strokeWidth="1.1" strokeLinecap="square" />
+          <circle cx="8" cy="8" r="1.3" fill="#d1fae5" />
+        </svg>
+      );
+    case 'mode':
+      return (
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+          <path d="M1 4h8V1.5L14.5 5 9 8.5V6H1z" fill="#0b1424" />
+          <path d="M2 4.5h7V2.8L12.5 5 9 7.2V5.5H2z" fill="#fdba74" />
+          <path d="M15 11.5H7V9L1.5 12.5 7 16V13.5h8z" fill="#0b1424" />
+          <path d="M14 12H7V10.2L3.5 12.5 7 14.8V13h7z" fill="#f59e0b" />
+        </svg>
+      );
+    case 'execute':
+      return (
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+          <path d="M9 0 3 9h4l-1 7 7-10H9l1-6z" fill="#2a1a02" />
+          <path d="M8.6 1 4.7 8h3.2l-.9 5.4L11.4 6H8.4l.9-5z" fill="#431407" />
+          <path d="M8 1 5.6 7h2.2L7.2 11l2.6-4H8.4z" fill="#fde68a" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
 
 export function Origin70sIsland({
   skinColor,
@@ -573,6 +679,8 @@ export function Origin70sIsland({
   const initialFlightFuel = progressState.rpg.powersState?.flightFuel ?? 100;
   const flightFuelRef = useRef<number>(initialFlightFuel);
   const pendingFuelPersistRef = useRef<number>(0);
+  const pendingLanternDrainRef = useRef<number>(0);
+  const lanternDepletedRef = useRef<boolean>(false);
   const lastFuelUiShownRef = useRef<number>(Math.floor(initialFlightFuel));
   const pongBoardDepartureRef = useRef<{
     x: number;
@@ -1110,11 +1218,28 @@ export function Origin70sIsland({
         showToast('¡DASH ORBITAL de Asteroids ejecutado!');
       }
     } else if (power === 'sonar-pulse') {
+      const scannerEnergy = state.progressState.rpg.powersState?.scannerEnergy ?? 0;
+      if (!state.allUnlocked && scannerEnergy < SCANNER_PULSE_COST) {
+        retroAudio.npcBlip(0.7);
+        showToast(
+          `Escáner sin energía (${Math.floor(scannerEnergy)}/${SCANNER_PULSE_COST}). Recarga en un Punto de Guardado GBC.`
+        );
+        return;
+      }
+      if (!state.allUnlocked) {
+        callbacksRef.current.onUpdatePowerEnergy?.(
+          'scannerEnergy',
+          -SCANNER_PULSE_COST
+        );
+      }
       retroAudio.scannerPing(true);
       scannerPulseRef.current = { active: true, elapsed: 0 };
       setSonarActive(true);
       window.setTimeout(() => setSonarActive(false), 1500);
-      showToast('¡PULSO SONAR de Sea Wolf emitido! Revelando secretos y mecanismos en 220px...');
+      const rangePx = Math.round(220 * getScannerRangeScale(state.progressState));
+      showToast(
+        `¡PULSO SONAR de Sea Wolf emitido! Revelando secretos y mecanismos en ${rangePx}px...`
+      );
     }
   }, [activePower, bladeMode, showToast]);
 
@@ -1220,9 +1345,24 @@ export function Origin70sIsland({
       );
       return;
     }
+    const scannerEnergy = st.progressState.rpg.powersState?.scannerEnergy ?? 0;
+    if (!st.allUnlocked && scannerEnergy < SCANNER_PULSE_COST) {
+      retroAudio.npcBlip(0.75);
+      showToast(
+        `Escáner sin energía (${Math.floor(scannerEnergy)}/${SCANNER_PULSE_COST}). Recarga en un Punto de Guardado GBC.`
+      );
+      return;
+    }
+    if (!st.allUnlocked) {
+      callbacksRef.current.onUpdatePowerEnergy?.(
+        'scannerEnergy',
+        -SCANNER_PULSE_COST
+      );
+    }
     retroAudio.scannerPing();
     scannerPulseRef.current = { active: true, elapsed: 0 };
 
+    const rangeScale = getScannerRangeScale(st.progressState);
     const px = playerPosBridgeRef.current.x;
     const py = playerPosBridgeRef.current.y;
     const curArea = activeAreaRef.current;
@@ -1231,7 +1371,7 @@ export function Origin70sIsland({
         cr.areaId === curArea &&
         cr.requiresLanternOrScanner &&
         !st.progressState.rpg.calmedCreatureIds.includes(cr.id) &&
-        Math.hypot(px - cr.x, py - cr.y) < 160
+        Math.hypot(px - cr.x, py - cr.y) < 160 * rangeScale
       ) {
         retroAudio.creatureChime(true);
         callbacksRef.current.onCalmCreature(cr.id);
@@ -1241,7 +1381,7 @@ export function Origin70sIsland({
     }
 
     for (const mound of ISLAND_SAND_MOUNDS) {
-      if (Math.hypot(px - mound.x, py - mound.y) < 150) {
+      if (Math.hypot(px - mound.x, py - mound.y) < 150 * rangeScale) {
         const alreadyCollected = st.progressState.rpg.openedChestIds.includes(mound.id);
         if (mound.rewardItemId && !alreadyCollected) {
           retroAudio.shardCollect(3);
@@ -1273,6 +1413,16 @@ export function Origin70sIsland({
       return;
     }
     const nextState = !st.progressState.rpg.lanternActive;
+    if (nextState && !st.allUnlocked) {
+      const battery = st.progressState.rpg.powersState?.lanternBattery ?? 0;
+      if (battery <= 0.01) {
+        retroAudio.npcBlip(0.75);
+        showToast(
+          'Batería de la lámpara agotada · Recarga en un Punto de Guardado GBC.'
+        );
+        return;
+      }
+    }
     retroAudio.shardCollect(nextState ? 2 : 0);
     callbacksRef.current.onToggleLantern(nextState);
     showToast(
@@ -1305,6 +1455,18 @@ export function Origin70sIsland({
       if (already) {
         showToast('El Relé Auxiliar ya opera al 100% de resonancia.');
         return;
+      }
+      const welderCost = getWelderCost(st.progressState);
+      const welderEnergy = st.progressState.rpg.powersState?.welderEnergy ?? 0;
+      if (!st.allUnlocked && welderEnergy < welderCost) {
+        retroAudio.npcBlip(0.75);
+        showToast(
+          `Soldador sin energía (${Math.floor(welderEnergy)}/${welderCost}). Recarga en un Punto de Guardado GBC.`
+        );
+        return;
+      }
+      if (!st.allUnlocked) {
+        callbacksRef.current.onUpdatePowerEnergy?.('welderEnergy', -welderCost);
       }
       retroAudio.questComplete();
       callbacksRef.current.onRepairMechanism(BROKEN_RELAY_MECHANISM.id, [
@@ -1700,6 +1862,18 @@ export function Origin70sIsland({
             accentHex: '#f97316',
           });
           return;
+        }
+        const welderCost = getWelderCost(st.progressState);
+        const welderEnergy = st.progressState.rpg.powersState?.welderEnergy ?? 0;
+        if (!st.allUnlocked && welderEnergy < welderCost) {
+          retroAudio.npcBlip(0.75);
+          showToast(
+            `Soldador sin energía (${Math.floor(welderEnergy)}/${welderCost}). Recarga en un Punto de Guardado GBC.`
+          );
+          return;
+        }
+        if (!st.allUnlocked) {
+          callbacksRef.current.onUpdatePowerEnergy?.('welderEnergy', -welderCost);
         }
         retroAudio.questComplete();
         callbacksRef.current.onRepairMechanism(BROKEN_RELAY_MECHANISM.id, [
@@ -3968,6 +4142,30 @@ export function Origin70sIsland({
       const curArea = activeAreaRef.current;
       const flight = vehicleFlightRef.current;
 
+      const powersState = st.progressState.rpg.powersState;
+      if (powersState && st.progressState.rpg.lanternActive && !st.allUnlocked) {
+        if (powersState.lanternBattery <= 0.01) {
+          if (!lanternDepletedRef.current) {
+            lanternDepletedRef.current = true;
+            callbacksRef.current.onToggleLantern(false);
+            showToast(
+              'Lámpara de Fósforo agotada · Recarga la batería en un Punto de Guardado GBC.'
+            );
+          }
+        } else if (!st.modalOpen) {
+          lanternDepletedRef.current = false;
+          pendingLanternDrainRef.current += dt * LANTERN_DRAIN_PER_SECOND;
+          if (pendingLanternDrainRef.current >= 0.5) {
+            const drain = Math.floor(pendingLanternDrainRef.current);
+            pendingLanternDrainRef.current -= drain;
+            callbacksRef.current.onUpdatePowerEnergy?.('lanternBattery', -drain);
+          }
+        }
+      } else {
+        lanternDepletedRef.current = false;
+        pendingLanternDrainRef.current = 0;
+      }
+
       if (pongBoardDepartureRef.current) {
         pongBoardDepartureRef.current.elapsed += dt;
         if (pongBoardDepartureRef.current.elapsed >= pongBoardDepartureRef.current.duration) {
@@ -5972,10 +6170,11 @@ export function Origin70sIsland({
               aria-pressed={activePower === 'pong-hoverboard'}
               onClick={() => { setActivePower('pong-hoverboard'); executeActivePower('pong-hoverboard'); }}
               disabled={!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked)}
-              className={`pv-slot ${activePower === 'pong-hoverboard' && isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? 'is-locked' : ''}`}
-              style={{ '--slot': '#facc15' } as React.CSSProperties}
+              className={`pv-slot ${activePower === 'pong-hoverboard' && isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? 'is-locked' : flightFuelUi <= 20 && !allUnlocked ? 'is-lowfuel' : ''}`}
+              style={{ '--slot': '#facc15', display: isIslandPowerUnlocked('pong-hoverboard', progressState, allUnlocked) ? undefined : 'none' } as React.CSSProperties}
             >
               <span className="pv-slot__key" aria-hidden="true">1</span>
+              <span className="pv-slot__icon" aria-hidden="true"><PowerHudIcon kind="paddle" /></span>
               <span className="pv-slot__body">
                 <span className="pv-slot__name">Paleta</span>
                 <span className="pv-slot__status">
@@ -5999,9 +6198,10 @@ export function Origin70sIsland({
               onClick={() => { setActivePower('shifting-blade'); executeActivePower('shifting-blade'); }}
               disabled={!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked)}
               className={`pv-slot ${activePower === 'shifting-blade' && isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked) ? 'is-locked' : ''}`}
-              style={{ '--slot': '#fb923c' } as React.CSSProperties}
+              style={{ '--slot': '#fb923c', display: isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked) ? undefined : 'none' } as React.CSSProperties}
             >
               <span className="pv-slot__key" aria-hidden="true">2</span>
+              <span className="pv-slot__icon" aria-hidden="true"><PowerHudIcon kind="blade" /></span>
               <span className="pv-slot__body">
                 <span className="pv-slot__name">Espada</span>
                 <span className="pv-slot__status">
@@ -6018,9 +6218,10 @@ export function Origin70sIsland({
               onClick={() => { setActivePower('orbital-dash'); executeActivePower('orbital-dash'); }}
               disabled={!isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked)}
               className={`pv-slot ${activePower === 'orbital-dash' && isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked) ? 'is-locked' : ''}`}
-              style={{ '--slot': '#38e8ff' } as React.CSSProperties}
+              style={{ '--slot': '#38e8ff', display: isIslandPowerUnlocked('orbital-dash', progressState, allUnlocked) ? undefined : 'none' } as React.CSSProperties}
             >
               <span className="pv-slot__key" aria-hidden="true">3</span>
+              <span className="pv-slot__icon" aria-hidden="true"><PowerHudIcon kind="dash" /></span>
               <span className="pv-slot__body">
                 <span className="pv-slot__name">Dash</span>
                 <span className="pv-slot__status">
@@ -6039,14 +6240,19 @@ export function Origin70sIsland({
               onClick={() => { setActivePower('sonar-pulse'); executeActivePower('sonar-pulse'); }}
               disabled={!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked)}
               className={`pv-slot ${activePower === 'sonar-pulse' && isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked) ? 'is-active' : ''} ${!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked) ? 'is-locked' : ''}`}
-              style={{ '--slot': '#34d399' } as React.CSSProperties}
+              style={{ '--slot': '#34d399', display: isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked) ? undefined : 'none' } as React.CSSProperties}
             >
               <span className="pv-slot__key" aria-hidden="true">4</span>
+              <span className="pv-slot__icon" aria-hidden="true"><PowerHudIcon kind="sonar" /></span>
               <span className="pv-slot__body">
                 <span className="pv-slot__name">Sonar</span>
                 <span className="pv-slot__status">
                   {!isIslandPowerUnlocked('sonar-pulse', progressState, allUnlocked)
                     ? 'SELLADA'
+                    : !allUnlocked &&
+                      (progressState.rpg.powersState?.scannerEnergy ?? 0) <
+                        SCANNER_PULSE_COST
+                    ? 'SIN ENERGÍA'
                     : sonarActive
                     ? 'ACTIVO'
                     : 'LISTO'}
@@ -6060,9 +6266,11 @@ export function Origin70sIsland({
               disabled={!isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked)}
               onClick={() => setBladeMode((mode) => mode === 'short' ? 'extended' : mode === 'extended' ? 'gun' : 'short')}
               className="pv-modekey"
+              style={{ display: isIslandPowerUnlocked('shifting-blade', progressState, allUnlocked) ? undefined : 'none' }}
               title="Cambiar modo de arma"
             >
               <span className="pv-modekey__key" aria-hidden="true">C</span>
+              <span className="pv-modekey__icon" aria-hidden="true"><PowerHudIcon kind="mode" /></span>
               <span className="pv-modekey__body">
                 <span className="pv-modekey__label">MODO</span>
                 <span className="pv-modekey__sub">
@@ -6072,9 +6280,7 @@ export function Origin70sIsland({
             </button>
             <button type="button" onClick={() => executeActivePower()} className="pv-exec" title="Ejecutar el poder activo">
               <span className="pv-exec__key" aria-hidden="true">F</span>
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M13 2 4.5 13.2c-.4.5 0 1.3.7 1.3H10l-1 7.4c-.1.9 1 1.4 1.6.7L20 11.3c.5-.6.1-1.5-.7-1.5H14l1-7.1c.1-.9-1.1-1.4-1.7-.7Z" />
-              </svg>
+              <PowerHudIcon kind="execute" />
               <span>Ejecutar</span>
             </button>
           </div>
@@ -6502,6 +6708,13 @@ export function Origin70sIsland({
             if (!callbacksRef.current.onPurchasePowerUpgrade) {
               retroAudio.npcBlip(0.7);
               showToast('Las mejoras de poderes no están disponibles en este momento.');
+              return;
+            }
+            const availableDiamonds =
+              progressState.diamondsSaved - (progressState.diamondsSpent ?? 0);
+            if (availableDiamonds < costDiamonds) {
+              retroAudio.npcBlip(0.7);
+              showToast('Diamantes insuficientes para adquirir esta mejora.');
               return;
             }
             callbacksRef.current.onPurchasePowerUpgrade(upgradeId, costDiamonds);

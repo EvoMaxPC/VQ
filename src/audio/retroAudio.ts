@@ -162,6 +162,37 @@ class RetroAudioEngine {
     osc.stop(now + 0.42);
   }
 
+  /** Trueno grave con chispa eléctrica para la llegada del viajero. */
+  public thunderRoll(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const rumble = ctx.createOscillator();
+    const rumbleGain = ctx.createGain();
+    rumble.type = 'sawtooth';
+    rumble.frequency.setValueAtTime(62, now);
+    rumble.frequency.exponentialRampToValueAtTime(28, now + 1.8);
+    rumbleGain.gain.setValueAtTime(0.09, now);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 2.1);
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(ctx.destination);
+    rumble.start(now);
+    rumble.stop(now + 2.15);
+
+    const crack = ctx.createOscillator();
+    const crackGain = ctx.createGain();
+    crack.type = 'square';
+    crack.frequency.setValueAtTime(1400, now);
+    crack.frequency.exponentialRampToValueAtTime(180, now + 0.18);
+    crackGain.gain.setValueAtTime(0.05, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    crack.connect(crackGain);
+    crackGain.connect(ctx.destination);
+    crack.start(now);
+    crack.stop(now + 0.24);
+  }
+
   public pongPaddle(): void {
     const ctx = this.getContext();
     if (!ctx) return;
@@ -484,6 +515,34 @@ class RetroAudioEngine {
       gain.connect(ctx.destination);
       osc.start(t);
       osc.stop(t + 0.5);
+    });
+  }
+
+  /** Radio de la cabaña: melodía cálida con el temblor de una emisora vieja. */
+  public radioBroadcast(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const notes = [392.0, 493.88, 440.0, 349.23, 392.0];
+    notes.forEach((f, idx) => {
+      const t = now + idx * 0.46;
+      const osc = ctx.createOscillator();
+      const shimmer = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      shimmer.type = 'sine';
+      osc.frequency.setValueAtTime(f, t);
+      shimmer.frequency.setValueAtTime(f * 2.01, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.linearRampToValueAtTime(0.032, t + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.43);
+      osc.connect(gain);
+      shimmer.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.46);
+      shimmer.start(t);
+      shimmer.stop(t + 0.46);
     });
   }
 
